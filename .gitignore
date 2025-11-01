@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+.venv.backup/
+venv/
+ENV/
+env/
+
+# Conda environments
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Data directories (large files, don't commit)
+data/**
+!data/.gitkeep
+!data/intake/
+!data/intake/.gitkeep
+!data/interim/
+!data/interim/.gitkeep
+!data/processed/
+!data/processed/.gitkeep
+
+# QC outputs
+qc/panels/**
+qc/*.zip
+!qc/panels/.gitkeep
+!qc/panels/**/.gitkeep
+
+# Temporary files
+tmp/
+*.log
+*.tmp
+.DS_Store
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI assistants
+.claude/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Rollback snapshots
+.rollback/

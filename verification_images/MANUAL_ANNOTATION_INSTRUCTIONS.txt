@@ -1,0 +1,40 @@
+MANUAL ANNOTATION INSTRUCTIONS
+==============================
+
+Since the interactive tool has tkinter issues, here's how to complete the annotations manually:
+
+1. OPEN THE IMAGES AND PDF:
+   - Thermal images are in: data/legacy_ro/penguin-2.0/data/raw/thermal-images/DJI_202411061712_006_Create-Area-Route5/
+   - PDF reference: verification_images/Penguin Count - 7 Photos.pdf
+
+2. FOR EACH FRAME:
+   Frame 0354: DJI_20241106194535_0354_T.JPG (23 penguins expected)
+   Frame 0357: DJI_20241106194546_0357_T.JPG (20 penguins expected)
+   Frame 0358: DJI_20241106194549_0358_T.JPG (15 penguins expected)
+   Frame 0359: DJI_20241106194553_0359_T.JPG (13 penguins expected)
+
+3. USE PREVIEW TO GET COORDINATES:
+   - Open thermal image in Preview
+   - Tools → Show Inspector (Cmd+I)
+   - Hover over each penguin to see pixel coordinates
+   - Write down x,y for each penguin
+
+4. ENTER COORDINATES:
+   Option A: Use the CLI tool manually:
+   python3 scripts/mark_penguins_cli.py --output verification_images/frame_0354_locations.csv --expected 23 --width 640 --height 512
+
+   Option B: Create CSV directly:
+   - Copy template below
+   - Fill in x,y coordinates
+   - Save as frame_XXXX_locations.csv
+
+CSV TEMPLATE:
+x,y,label
+[x1],[y1],penguin
+[x2],[y2],penguin
+...
+
+5. AFTER ANNOTATION:
+   Run: ./scripts/validate_all_frames.sh
+
+TOTAL WORK: 71 penguins across 4 frames

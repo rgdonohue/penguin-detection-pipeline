@@ -1,0 +1,8 @@
+I have a link for some H30T test data.
+
+There are two flights. 
+001 is taken normally. 
+002 is taken with the new “high contrast” feature or something like that. It says you cant pull temperature from it while flying in this mode. My assumption is that it’s becuase it’s all AI boosted and you lose the calibrated data. But I took some anyway. 
+The last folder is just stills. Messing around and seeing me closer up, etc. Toggling between the different recording features at different altitudes. 
+
+Sending these over just so you have them and to take a look at normalizing the temperature data. Hoping we find the radiometric data quickly and easily in this. 

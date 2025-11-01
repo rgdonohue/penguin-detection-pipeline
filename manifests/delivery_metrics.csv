@@ -1,0 +1,2 @@
+date,stage,action,lead_time_min,success,change_failure_detected,time_to_restore_min,candidate_count,notes
+2025-10-08,lidar,test_run,720,true,false,0,862,"Initial golden AOI test on cloud3.las - baseline established"

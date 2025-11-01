@@ -1,0 +1,60 @@
+# Penguin Detection Pipeline - Full Dependencies (All Stages)
+# Python 3.11+ required
+
+# Core dependencies (LiDAR stage)
+-r requirements.txt
+
+# Data Processing
+pandas>=2.3.3
+
+# ============================================================================
+# GDAL/Rasterio Installation (Required for Thermal/Fusion Stages)
+# ============================================================================
+#
+# ⚠️  GDAL has complex system dependencies. Choose ONE installation method:
+#
+# METHOD 1: Conda (RECOMMENDED - Most Reliable)
+# ---------------------------------------------
+# Create a conda environment with GDAL pre-built:
+#
+#   conda create -n penguins-thermal python=3.11
+#   conda activate penguins-thermal
+#   conda install -c conda-forge gdal rasterio pyproj geopandas
+#   pip install -r requirements.txt  # Install remaining dependencies
+#
+# METHOD 2: System GDAL + pip (Advanced)
+# ---------------------------------------
+# Install GDAL system libraries first:
+#
+#   macOS:   brew install gdal
+#   Ubuntu:  sudo apt-get install gdal-bin libgdal-dev
+#   Fedora:  sudo dnf install gdal gdal-devel
+#
+# Then install Python bindings (match GDAL version!):
+#
+#   gdal==$(gdal-config --version)
+#   pip install gdal==$GDAL_VERSION
+#   pip install rasterio pyproj geopandas
+#
+# METHOD 3: Docker/Devcontainer (Future)
+# ---------------------------------------
+# Use pre-built image with GDAL (not yet configured for this project)
+#
+# ============================================================================
+# Uncomment below ONLY after installing GDAL via one of the methods above:
+# ============================================================================
+
+# gdal>=3.6.0
+# rasterio>=1.3.0
+# pyproj>=3.4.0
+# geopandas>=0.12.0
+# fiona>=1.9.0
+# shapely>=2.0.0
+# pyogrio>=0.5.0
+# rtree>=1.0.0
+
+# Notebook support (optional)
+# jupyter>=1.0.0
+
+# PDAL for LiDAR (optional, if needed for advanced processing)
+# python-pdal>=3.2.0

@@ -1,0 +1,23 @@
+# Penguin Detection Pipeline - Core Dependencies (LiDAR Stage)
+# Python 3.11+ required
+# Install: python -m pip install -r requirements.txt
+
+# LiDAR Processing
+laspy>=2.6.1
+numpy>=2.0.2
+scipy>=1.13.1
+scikit-image>=0.24.0
+matplotlib>=3.9.4
+
+# Image Processing
+Pillow>=9.0.0  # For thermal image loading and interactive marking tool
+
+# Testing
+pytest>=8.4.2
+
+# Code Quality
+ruff>=0.14.0
+
+# Optional: nice CLI output
+rich>=14.2.0
+click>=8.1.8
