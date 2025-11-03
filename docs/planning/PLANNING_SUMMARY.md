@@ -18,9 +18,9 @@
 - 2-week timeline estimate
 - Clear completion criteria for each task
 
-**This replaces:** Overlapping guidance from PLAN.md, NEXT_STEPS.md, and scattered TODOs
+**This replaces:** Overlapping guidance from PLAN.md, docs/planning/NEXT_STEPS.md, and scattered TODOs
 
-### 2. **NEXT_STEPS.md** — Detailed 7-Phase Plan
+### 2. **docs/planning/NEXT_STEPS.md** — Detailed 7-Phase Plan
 **Purpose:** Comprehensive breakdown of each phase with examples
 
 **Covers:**
@@ -38,11 +38,11 @@
 **Purpose:** Consolidate documentation and archive old scripts
 
 **Actions:**
-- Move PLAN.md → notes/archive/ (historical)
-- Move 8 prototype scripts → scripts/archive/
+- Move PLAN.md → docs/planning/ (centralized)
+- Move 8 prototype scripts → scripts/experiments/
 - Consolidate 15+ markdown files → 8 essential docs
 - Create README.md (missing)
-- Update STATUS.md to remove "BLOCKER" language
+- Update docs/reports/STATUS.md to remove "BLOCKER" language
 
 ---
 
@@ -110,13 +110,13 @@ From `notes/pipeline_todo.md`:
 - **notes/pipeline_todo.md** ← Single source of truth for all tasks
 
 ### Reference Plans
-- **NEXT_STEPS.md** ← Detailed phase breakdown (superseded by pipeline_todo.md)
+- **docs/planning/NEXT_STEPS.md** ← Detailed phase breakdown (superseded by pipeline_todo.md)
 - **CLEANUP_PLAN.md** ← Project organization guide
 
 ### Living Documents (Update After Each Task)
-- **STATUS.md** ← "What works now"
+- **docs/reports/STATUS.md** ← "What works now"
 - **RUNBOOK.md** ← "Proven commands only"
-- **thermal_extraction_progress.md** ← Investigation findings log
+- **docs/reports/thermal_extraction_progress.md** ← Investigation findings log
 
 ### Stable Reference
 - **PRD.md** ← Requirements & design
@@ -144,7 +144,7 @@ From `notes/pipeline_todo.md`:
 3. **Thermal Calibration** [6 hours]
    - Prototype on frame 0356 (26 verified penguins)
    - Try Option A (decode ThermalCalibration blob), B (atmospheric correction), or C (empirical offset)
-   - Document findings in thermal_extraction_progress.md
+   - Document findings in docs/reports/thermal_extraction_progress.md
 
 ### Week 1 Deliverables
 - Environment validated ✅
@@ -158,7 +158,7 @@ From `notes/pipeline_todo.md`:
 - LiDAR full run complete + count
 - Fusion analysis complete
 - Client visual outputs ready
-- STATUS.md updated for Argentina
+- docs/reports/STATUS.md updated for Argentina
 
 ---
 
@@ -180,7 +180,7 @@ From `notes/pipeline_todo.md`:
 
 ## 📝 Outstanding Questions for You
 
-As noted in NEXT_STEPS.md, these would help refine the plan:
+As noted in docs/planning/NEXT_STEPS.md, these would help refine the plan:
 
 1. **Ground Truth Tool:** Want help creating a click-to-annotate tool for faster CSV creation, or prefer manual entry?
 
@@ -206,10 +206,10 @@ As noted in NEXT_STEPS.md, these would help refine the plan:
 From CLEANUP_PLAN.md:
 
 **Can do anytime (doesn't block client work):**
-- Archive PLAN.md and NEXT_STEPS.md to notes/archive/
-- Move 8 prototype thermal scripts to scripts/archive/
+- Keep PLAN.md and docs/planning/NEXT_STEPS.md inside docs/planning/ for quick reference
+- Move prototype thermal scripts to scripts/experiments/
 - Create missing README.md
-- Update STATUS.md to remove "BLOCKER" language (thermal investigation complete)
+- Update docs/reports/STATUS.md to remove "BLOCKER" language (thermal investigation complete)
 - Consolidate docs/supplementary/ files
 
 **Estimated time:** 1-2 hours total
@@ -222,7 +222,7 @@ From CLEANUP_PLAN.md:
 - `notes/pipeline_todo.md` ← Single source of truth
 
 **For Current State:**
-- `STATUS.md` ← What works now
+- `docs/reports/STATUS.md` ← What works now
 
 **For Commands:**
 - `RUNBOOK.md` ← Tested commands only
@@ -234,8 +234,8 @@ From CLEANUP_PLAN.md:
 - `README.md` ← Quick start guide
 
 **For Investigation:**
-- `thermal_extraction_progress.md` ← Thermal findings log
-- `docs/THERMAL_INVESTIGATION_FINAL.md` ← Complete analysis
+- `docs/reports/thermal_extraction_progress.md` ← Thermal findings log
+- `docs/supplementary/THERMAL_INVESTIGATION_FINAL.md` ← Complete analysis
 
 **For Client:**
 - `docs/PENGUIN_DETECTION_PIPELINE_PROJECT_SUMMARY.md`
@@ -269,7 +269,7 @@ Client specifically requested more visuals, so each phase should generate visual
 1. Check `notes/pipeline_todo.md` for next task
 2. Review task dependencies and deliverables
 3. Execute task
-4. Update STATUS.md and RUNBOOK.md if needed
+4. Update docs/reports/STATUS.md and RUNBOOK.md if needed
 5. Check off task in pipeline_todo.md
 
 **Need command reference:**
@@ -278,7 +278,7 @@ Client specifically requested more visuals, so each phase should generate visual
 
 **Need context on design:**
 - Check PRD.md for requirements
-- Check thermal_extraction_progress.md for investigation history
+- Check docs/reports/thermal_extraction_progress.md for investigation history
 
 **Need to explain to client:**
 - Use docs/THERMAL_FINDINGS_SUMMARY.md
@@ -292,7 +292,7 @@ Client specifically requested more visuals, so each phase should generate visual
 
 **What was delivered:**
 - ✅ `notes/pipeline_todo.md` — Single source of truth for all tasks (9 prioritized tasks, 2-week plan)
-- ✅ `NEXT_STEPS.md` — Detailed 7-phase breakdown with examples and rationale
+- ✅ `docs/planning/NEXT_STEPS.md` — Detailed 7-phase breakdown with examples and rationale
 - ✅ `CLEANUP_PLAN.md` — Project organization guide (doc consolidation, script archiving)
 - ✅ Codex feedback incorporated throughout (foundation hygiene, prototype-before-batch, capture workflows)
 - ✅ Client goals centered (1533 target count, visual outputs, Argentina prep)

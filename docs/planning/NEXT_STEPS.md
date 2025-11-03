@@ -82,7 +82,7 @@ The client's estimated total penguin count of **1533** (not 1022 as previously s
    python scripts/optimize_thermal_detection.py \
      --ground-truth-dir verification_images/ \
      --thermal-dir data/legacy_ro/penguin-2.0/data/raw/thermal-images/ \
-     --output data/interim/optimization_results.csv
+     --output data/interim/thermal/optimization_results.csv
    ```
 
    **Parameters to sweep:**
@@ -123,8 +123,8 @@ The client's estimated total penguin count of **1533** (not 1022 as previously s
    ```bash
    python scripts/run_thermal_detection_batch.py \
      --input data/legacy_ro/penguin-2.0/data/raw/thermal-images/ \
-     --params data/interim/optimal_thermal_params.json \
-     --output data/processed/thermal_detections/ \
+     --params data/interim/thermal/optimal_thermal_params.json \
+     --output data/processed/thermal/thermal_detections/ \
      --parallel 4 \
      --checkpoint-every 100
    ```
@@ -284,8 +284,9 @@ Understand the relationship between LiDAR and thermal detections:
    - Too many markdown files in `docs/supplementary/`
    - Create `docs/archive/` for old investigation notes
    - Keep only essential docs in root and `docs/`:
-     - Root: `README.md`, `PRD.md`, `RUNBOOK.md`, `STATUS.md`, `CLAUDE.md`, `NEXT_STEPS.md`
-     - `docs/`: Client-facing summaries only
+     - Root: `README.md`, `PRD.md`, `RUNBOOK.md`, `CLAUDE.md`, `Makefile`
+     - `docs/planning/`: Working plans (`docs/planning/NEXT_STEPS.md`, `PLAN.md`, etc.)
+     - `docs/reports/`: Status snapshots (`docs/reports/STATUS.md`, thermal progress logs)
 
 2. **Remove redundant scripts**
    - Many test scripts in `scripts/`:
@@ -294,10 +295,10 @@ Understand the relationship between LiDAR and thermal detections:
      - `test_thermal_detection_0353.py`
      - `test_thermal_detection_enhanced.py`
      - `test_thermal_local_deltaT.py`
-   - Consolidate into single script or move to `scripts/archive/`
+   - Consolidate into a single script or move to `scripts/experiments/`
    - Keep only production scripts
 
-3. **Update STATUS.md**
+3. **Update docs/reports/STATUS.md**
    - Reflect completion of thermal investigation
    - Remove "BLOCKER" status (investigation complete, weak signal understood)
    - Update "Next Steps" section with this plan
@@ -305,8 +306,8 @@ Understand the relationship between LiDAR and thermal detections:
 4. **Clean up interim files**
    ```bash
    # Archive old test outputs
-   mkdir -p data/interim/archive
-   mv data/interim/thermal_validation_* data/interim/archive/
+   mkdir -p data/interim/thermal/archive
+   mv data/interim/thermal/thermal_validation data/interim/thermal/archive/
    ```
 
 5. **Update RUNBOOK.md**
@@ -452,7 +453,7 @@ Understand the relationship between LiDAR and thermal detections:
 ### Phase 7 (Cleanup)
 - ✅ Documentation consolidated (≤10 markdown files in root/docs)
 - ✅ Scripts organized (production vs archive)
-- ✅ STATUS.md updated
+- ✅ docs/reports/STATUS.md updated
 
 ---
 
@@ -474,13 +475,13 @@ Understand the relationship between LiDAR and thermal detections:
 ### Scripts to Refactor/Consolidate
 - Merge multiple `test_thermal_detection*.py` into single parameterized script
 - Extract common functions to `pipelines/thermal.py` library
-- Move investigation scripts to `scripts/archive/`
+- Move investigation scripts to `scripts/experiments/`
 
 ### Documentation to Update
-- `STATUS.md` - reflect post-investigation status
+- `docs/reports/STATUS.md` - reflect post-investigation status
 - `RUNBOOK.md` - add full-dataset workflow
 - `PRD.md` - possibly update with 1533 target count
-- `README.md` - add link to NEXT_STEPS.md
+- `README.md` - add link to docs/planning/NEXT_STEPS.md
 
 ---
 
@@ -517,9 +518,9 @@ Understand the relationship between LiDAR and thermal detections:
 ### Key Scripts
 - ✅ `scripts/run_lidar_hag.py` - Working LiDAR detection
 - ✅ `scripts/run_thermal_ortho.py` - Thermal orthorectification (working but not optimized)
-- ✅ `scripts/validate_thermal_extraction.py` - Thermal validation tool
-- ❌ `scripts/optimize_thermal_detection.py` - TO BE CREATED
-- ❌ `scripts/run_thermal_detection_batch.py` - TO BE CREATED
+- ✅ `scripts/experiments/validate_thermal_extraction.py` - Thermal validation tool
+- ✅ `scripts/optimize_thermal_detection.py` - Thermal parameter sweeps
+- ✅ `scripts/run_thermal_detection_batch.py` - Batch detection executor
 - ❌ `scripts/run_fusion_join.py` - TO BE CREATED
 
 ### Documentation Requiring Cleanup

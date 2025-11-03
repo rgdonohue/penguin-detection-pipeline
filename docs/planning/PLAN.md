@@ -34,7 +34,7 @@ DORA principles documented for future implementation:
 
 ### ⚠️ Corrective Actions (After Codex Review)
 - Stripped Makefile to only working targets
-- Added honest STATUS.md documenting what actually works
+- Added honest docs/reports/STATUS.md documenting what actually works
 - Created RUNBOOK.md with tested commands only
 - Disabled untested pre-commit hooks
 - Acknowledged environment setup dependency
