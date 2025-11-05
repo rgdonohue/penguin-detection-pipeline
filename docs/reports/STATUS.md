@@ -1,6 +1,6 @@
 # Project Status — Honest Assessment
 
-Last updated: 2025-10-13
+Last updated: 2025-11-05 20:01 UTC
 
 ---
 
@@ -11,7 +11,7 @@ Last updated: 2025-10-13
 
 - **Script:** `scripts/run_lidar_hag.py` (copied from penguin-2.0, proven code)
 - **Dependencies:** `pipelines/utils/provenance.py` (copied)
-- **Test results:** 879 candidates detected on cloud3.las in ~12 seconds
+- **Test results (2025-11-05):** 879 candidates detected on cloud3.las (pytest guardrail; 51 s runtime)
 - **Outputs:** JSON, GeoJSON, QC plots
 - **Makefile target:** `make test-lidar` ✅
 - **CAVEAT:** Requires laspy, scipy, scikit-image, numpy, matplotlib installed

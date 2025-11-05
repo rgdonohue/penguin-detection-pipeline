@@ -1,6 +1,6 @@
 # Pipeline TODO — Single Source of Truth
 
-**Last Updated:** 2025-10-21 (Consolidated from PLAN.md, NEXT_STEPS.md, and Codex feedback)
+**Last Updated:** 2025-11-05 19:58 UTC (Consolidated from PLAN.md, NEXT_STEPS.md, and Codex feedback)
 **Purpose:** Single task tracker for Argentina deployment preparation
 
 ---
@@ -23,21 +23,20 @@
 
 ### 1. Environment Verification & Foundation Hygiene [30 min] 🔴 NEXT UP
 
-**Codex Feedback:** "Finish the outstanding retest once laspy is available, record the run in RUNBOOK.md, and note GDAL install status so thermal tests stop skipping unexpectedly."
+**Status Update (2025-11-05):** Python env provisioned via `make env`; LiDAR guardrail (`pytest tests/test_golden_aoi.py`) now passes with refreshed 879 detection baseline. GDAL/PIL status still needs to be captured for thermal work.
 
-**Tasks:**
-- [ ] Install/verify laspy availability (`pip list | grep laspy`)
-- [ ] Rerun `make test-lidar` and verify 879 detections (or document new baseline)
-- [ ] Run `pytest tests/test_golden_aoi.py -v` and verify all 12 tests pass
+**Next Actions:**
+- [x] Install/verify laspy availability (`pip list | grep laspy`) — confirmed via working LiDAR run
+- [x] Rerun `make test-lidar` / guardrail test — pytest suite green (12 passed, 51s)
 - [ ] Document GDAL install status (system/conda/none) in RUNBOOK.md:30
   - If installed: note version and method (conda/brew/apt)
   - If missing: document that thermal tests will skip
-- [ ] Record results in RUNBOOK.md with timestamp
+- [ ] Record LiDAR retest results + new 879 baseline in RUNBOOK.md with timestamp
 
 **Dependencies:** None (foundational)
-**Blocking:** All downstream tasks depend on stable environment
+**Blocking:** Thermal smoke tests rely on GDAL documentation; RUNBOOK update needed before handoff
 **Owner:** Richard
-**Deliverable:** RUNBOOK.md updated with confirmed environment state
+**Deliverable:** RUNBOOK.md updated with environment status and 879-count note
 
 ---
 
