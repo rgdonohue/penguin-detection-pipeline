@@ -43,7 +43,7 @@ python scripts/run_lidar_hag.py \
 - Processes LiDAR point clouds to detect penguin-sized objects
 - Uses Height-Above-Ground (HAG) analysis with morphological filtering
 - Outputs: GeoJSON, JSON summaries, QC plots
-- **Proven accuracy:** 862 detections on test data, reproducible across runs
+- **Proven accuracy:** 879 detections on test data, reproducible across runs
 
 **Thermal Processing (Research/Documentation 📊)**
 - Orthorectifies thermal imagery using LiDAR DSM
@@ -303,7 +303,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### "Detection count differs from expected 862"
+### "Detection count differs from expected 879"
 
 **Possible causes:**
 1. Different data file (cloud3.las checksum mismatch)
@@ -390,7 +390,7 @@ See [AI_POLICY.md](AI_POLICY.md) for AI collaboration guidelines.
 ## Current Status (As of 2025-10-14)
 
 **Production Ready:**
-- ✅ LiDAR detection pipeline (862 detections, reproducible)
+- ✅ LiDAR detection pipeline (879 detections, reproducible)
 - ✅ Automated testing (12 tests passing)
 - ✅ Provenance tracking
 - ✅ QC visualization

@@ -558,7 +558,7 @@ Magellanic penguins evolved exceptional insulation for survival in harsh coastal
 - Colder environments (Antarctic winter) would present additional detection challenges
 - Current commercial thermal camera technology shows limited applicability for individual penguin detection under these biological and environmental constraints
 
-**Proven Alternative**: LiDAR height-above-ground detection successfully identifies penguin-sized objects (862 detections in test area with reproducible pipeline results).
+**Proven Alternative**: LiDAR height-above-ground detection successfully identifies penguin-sized objects (879 detections in test area with reproducible pipeline results).
 
 ---
 

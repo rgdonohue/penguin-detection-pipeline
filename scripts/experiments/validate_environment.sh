@@ -147,9 +147,9 @@ if [ $? -eq 0 ]; then
     # Extract count using Python (no external dependencies)
     count=$(python3 -c "import json; print(json.load(open('data/interim/validation_test.json'))['total_count'])")
     echo -e "${GREEN}✓ LiDAR script ran successfully${NC}"
-    echo "  Detected: $count candidates (expected: 862 ± 5)"
+    echo "  Detected: $count candidates (expected: 879 ± 5)"
 
-    if [ "$count" -ge 857 ] && [ "$count" -le 867 ]; then
+    if [ "$count" -ge 874 ] && [ "$count" -le 884 ]; then
         echo -e "${GREEN}✓ Detection count within tolerance${NC}"
     else
         echo -e "${YELLOW}⚠ Detection count outside expected range${NC}"

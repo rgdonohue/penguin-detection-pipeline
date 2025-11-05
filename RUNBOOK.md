@@ -28,7 +28,7 @@ Last updated: 2025-10-08
 # 3. Install dependencies from requirements.txt
 # 4. Validate all required modules
 # 5. Check legacy data mounts
-# 6. Run LiDAR smoke test (862 detections expected)
+# 6. Run LiDAR smoke test (879 detections expected)
 # 7. Run golden AOI test suite (12 tests)
 ```
 
@@ -127,7 +127,7 @@ python3 scripts/run_lidar_hag.py \
 ```json
 {
   "files": 1,
-  "total_count": 862
+  "total_count": 879
 }
 ```
 
@@ -403,7 +403,7 @@ data/intake/h30t/                                  # Symlinks for reproducible r
 # Check detection count
 jq '.total_count' data/interim/lidar_test.json
 
-# Expected: 862
+# Expected: 879
 
 # Check file sizes
 ls -lh data/interim/lidar_hag_plots/

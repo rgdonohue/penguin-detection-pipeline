@@ -32,7 +32,11 @@ for p in [str(_ROOT / "src"), str(_ROOT)]:
 
 # Optional plotting
 try:
+    import matplotlib
+
+    matplotlib.use("Agg")  # Headless-safe backend
     import matplotlib.pyplot as plt
+
     MATPLOTLIB_AVAILABLE = True
 except Exception:
     MATPLOTLIB_AVAILABLE = False

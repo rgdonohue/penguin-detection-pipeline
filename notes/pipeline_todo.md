@@ -27,7 +27,7 @@
 
 **Tasks:**
 - [ ] Install/verify laspy availability (`pip list | grep laspy`)
-- [ ] Rerun `make test-lidar` and verify 862 detections (or document new baseline)
+- [ ] Rerun `make test-lidar` and verify 879 detections (or document new baseline)
 - [ ] Run `pytest tests/test_golden_aoi.py -v` and verify all 12 tests pass
 - [ ] Document GDAL install status (system/conda/none) in RUNBOOK.md:30
   - If installed: note version and method (conda/brew/apt)
@@ -164,13 +164,13 @@
 
 **Codex Feedback:** "Validate the current HAG tweaks, regenerate QC panels in data/interim/lidar_hag_plots/, and update rollup logic so reports can be calibrated against the 1533 benchmark (document assumptions in manifests/qc_report.md once the count math is steady)."
 
-**Status:** Working on sample (862 detections), needs full-dataset validation
+**Status:** Working on sample (879 detections), needs full-dataset validation
 
 **Tasks:**
 - [x] Wire CLI parameters (--top-method, --top-zscore-cap, --connectivity) ✅ DONE
 - [x] Reapply HAG threshold after morphology ✅ DONE
 - [x] Skip duplicate tiles (LiDAR/ vs LiDAR/sample/) ✅ DONE
-- [ ] Rerun `make test-lidar` and verify 862 ± tolerance (blocked on laspy - see #1)
+- [ ] Rerun `make test-lidar` and verify 879 ± tolerance (blocked on laspy - see #1)
 - [ ] Regenerate QC panels in `data/interim/lidar_hag_plots/`
 - [ ] Verify panel annotations use filtered detection count
 

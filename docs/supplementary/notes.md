@@ -129,7 +129,7 @@ This document presents data requirements for the penguin detection pipeline base
 
 #### Validated Performance Metrics
 
-Analysis of test data (862 validated detections) established clear relationships between data quality and detection success:
+Analysis of test data (879 validated detections) established clear relationships between data quality and detection success:
 
 **Point Density Thresholds**:
 - **>100 pts/m²**: Excellent detection, complete terrain modeling
@@ -277,7 +277,7 @@ Data transfer arrangements flexible based on team preferences (physical drives, 
 
 ### Executive Summary
 
-We have developed and validated a comprehensive penguin detection system combining LiDAR-based counting with thermal characterization capabilities. Testing on Magellanic penguin colonies in coastal Patagonia demonstrated robust detection performance with LiDAR (862 validated detections) and established baseline thermal signatures for the species. The system is ready for operational deployment.
+We have developed and validated a comprehensive penguin detection system combining LiDAR-based counting with thermal characterization capabilities. Testing on Magellanic penguin colonies in coastal Patagonia demonstrated robust detection performance with LiDAR (879 validated detections) and established baseline thermal signatures for the species. The system is ready for operational deployment.
 
 ---
 
@@ -294,7 +294,7 @@ We have developed and validated a comprehensive penguin detection system combini
 - Processing pipeline: Automated with quality control
 
 **Validated Performance**:
-- Test dataset: 862 detections with ground truth validation
+- Test dataset: 879 detections with ground truth validation
 - Reproducibility: Consistent results across multiple processing runs
 - Processing efficiency: ~12 seconds per 100×100m tile
 - Output formats: GeoJSON, GeoPackage (GIS-compatible)

@@ -156,7 +156,7 @@ make test
 
 ## Status
 
-- ✅ LiDAR detection: Working (862 detections on sample)
+- ✅ LiDAR detection: Working (879 detections on sample)
 - ✅ Thermal investigation: Complete (weak signal characterized)
 - ⏳ Full-dataset run: Planned (see NEXT_STEPS.md)
 - ⏳ Fusion analysis: Planned

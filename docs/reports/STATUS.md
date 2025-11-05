@@ -11,7 +11,7 @@ Last updated: 2025-10-13
 
 - **Script:** `scripts/run_lidar_hag.py` (copied from penguin-2.0, proven code)
 - **Dependencies:** `pipelines/utils/provenance.py` (copied)
-- **Test results:** 862 candidates detected on cloud3.las in ~12 seconds
+- **Test results:** 879 candidates detected on cloud3.las in ~12 seconds
 - **Outputs:** JSON, GeoJSON, QC plots
 - **Makefile target:** `make test-lidar` ✅
 - **CAVEAT:** Requires laspy, scipy, scikit-image, numpy, matplotlib installed
@@ -184,7 +184,7 @@ Last updated: 2025-10-13
 From PRD Section 3:
 
 - ✅ **Provenance:** Legacy findings documented with sources
-- ✅ **Reproducibility:** LiDAR produces identical 862 candidates across runs
+- ✅ **Reproducibility:** LiDAR produces identical 879 candidates across runs
 - ⏳ **LiDAR HAG:** Outputs JSON + GeoJSON + plots (waiting for GPKG + rollup_counts.json)
 - ⚠️ **Thermal Ortho:** Infrastructure complete, **validation incomplete** (BLOCKER)
   - Frame 0356: 86×94 pixels, EPSG:32720, ratio=1.0, offsets=0.0 ✅

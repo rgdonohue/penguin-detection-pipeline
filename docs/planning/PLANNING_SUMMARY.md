@@ -130,7 +130,7 @@ From `notes/pipeline_todo.md`:
 ### Immediate (This Week)
 1. **Environment Verification** [30 min]
    - Verify laspy installed
-   - Rerun make test-lidar (expect 862 detections)
+   - Rerun make test-lidar (expect 879 detections)
    - Run pytest tests/test_golden_aoi.py (expect 12 passes)
    - Document GDAL status in RUNBOOK.md
 

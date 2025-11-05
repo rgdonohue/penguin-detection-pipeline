@@ -135,7 +135,7 @@ Two parameter sets serve different purposes:
 --min-area-cells 2        # Min size (more permissive)
 --max-area-cells 80       # Max size (more permissive)
 ```
-**Results with DJI L2**: 862 detections on cloud3.las (reproducibility benchmark)
+**Results with DJI L2**: 879 detections on cloud3.las (reproducibility benchmark)
 
 **IMPORTANT**: Parameters may need adjustment for TrueView 515 data due to different sensor characteristics.
 

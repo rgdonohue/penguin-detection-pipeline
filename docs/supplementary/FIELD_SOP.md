@@ -120,7 +120,7 @@ Possible roles:
 - [ ] Update this SOP to remove thermal sections
 
 **Advantages:**
-- Proven pipeline (862 detections, reproducible)
+- Proven pipeline (879 detections, reproducible)
 - Simpler field operations
 - Lower data volume and processing time
 - Extended flight time without thermal payload

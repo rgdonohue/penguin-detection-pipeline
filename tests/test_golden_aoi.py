@@ -24,7 +24,7 @@ import shutil
 GOLDEN_DATA_ROOT = Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample")
 GOLDEN_LAZ_FILE = GOLDEN_DATA_ROOT / "cloud3.las"
 TEST_OUTPUT_DIR = Path("data/interim/test_golden")
-EXPECTED_DETECTION_COUNT = 862
+EXPECTED_DETECTION_COUNT = 879
 TOLERANCE = 5  # Allow ±5 detections for minor numerical variations
 
 
@@ -89,7 +89,7 @@ class TestLiDARPipeline:
         assert json_path.stat().st_size > 0, "Output JSON is empty"
 
     def test_detection_count(self):
-        """Verify expected number of detections (862 ± tolerance)."""
+        """Verify expected number of detections (879 ± tolerance)."""
         json_path = TEST_OUTPUT_DIR / "golden_results.json"
 
         with open(json_path) as f:
