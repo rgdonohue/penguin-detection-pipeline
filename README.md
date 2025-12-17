@@ -1,8 +1,8 @@
 # Penguin Detection Pipeline
 
-**Production-ready LiDAR-based penguin detection system for penguin colony field surveys.**
+**LiDAR-thermal fusion system for automated penguin detection in drone survey data.**
 
-Version 0.1 | Last Updated: 2025-10-14
+Version 0.2 | Last Updated: 2025-12-11
 
 ---
 
@@ -40,15 +40,34 @@ python scripts/run_lidar_hag.py \
 ## What This Pipeline Does
 
 **LiDAR Detection (Production Ready ✅)**
-- Processes LiDAR point clouds to detect penguin-sized objects
-- Uses Height-Above-Ground (HAG) analysis with morphological filtering
-- Outputs: GeoJSON, JSON summaries, QC plots
-- **Proven accuracy:** 879 detections on test data, reproducible across runs
+- Processes LiDAR point clouds to detect penguin-sized objects (0.2-0.6m HAG)
+- Uses Height-Above-Ground analysis with morphological filtering
+- Outputs: GeoJSON, JSON summaries, QC plots, interactive web maps
+- **Proven accuracy:** 802 detections on golden AOI, reproducible across runs
 
-**Thermal Processing (Research/Documentation 📊)**
-- Orthorectifies thermal imagery using LiDAR DSM
-- Extracts 16-bit radiometric temperature data
-- Status: Infrastructure validated, detection challenges characterized (see docs/THERMAL_INVESTIGATION_FINAL.md)
+**Thermal Processing (Research Phase ⚠️)**
+- Extracts 16-bit radiometric temperature data from DJI RJPEG format
+- Orthorectifies thermal imagery using camera model
+- Status: Infrastructure validated; ~9°C calibration offset unresolved
+
+**Fusion Pipeline (Not Yet Implemented ❌)**
+- Spatial join of LiDAR and thermal detections
+- Classification: Both / LiDAR-only / Thermal-only
+
+## Ground Truth Data
+
+**Argentina 2025 Field Collection:** ~3,705 penguins across multiple sites
+
+| Site | Penguins | Density |
+|------|----------|---------|
+| San Lorenzo Caves | 908 | 1,518/ha |
+| San Lorenzo Plains | 453 | 464/ha |
+| San Lorenzo Road | 359 | - |
+| Caleta Small Island | 1,557 | 389/ha |
+| Caleta Tiny Island | 321 | 459/ha |
+| Box Counts | 107 | 15-28/ha |
+
+GPS waypoints extracted to `data/processed/san_lorenzo_waypoints.csv`.
 
 ---
 
@@ -199,37 +218,41 @@ open quicklook/lidar_hag_plots/*.png
 ```
 penguins-4.0/
 ├── README.md                  # This file
+├── CLAUDE.md                  # AI assistant guidance
 ├── PRD.md                     # Product requirements
 ├── RUNBOOK.md                 # Command reference (tested only)
-├── STATUS.md                  # Honest project status
-├── DEPLOYMENT_CHECKLIST.md    # Pre-deployment guide
 │
 ├── data/
-│   ├── legacy_ro/             # Read-only legacy data
-│   ├── intake/                # Harvested inputs
+│   ├── legacy_ro/             # Read-only legacy data (NEVER MODIFY)
+│   ├── intake/                # Harvested inputs with checksums
 │   ├── interim/               # Temporary processing outputs
-│   └── processed/             # Final outputs
+│   └── processed/             # Final outputs (GeoJSON, CSV, etc.)
 │
 ├── scripts/
 │   ├── run_lidar_hag.py       # ⭐ Main LiDAR detection script
 │   ├── run_thermal_ortho.py   # Thermal orthorectification
-│   └── validate_environment.sh # Setup validation
+│   ├── create_detection_map.py # Interactive Folium web maps
+│   ├── analyze_san_lorenzo_counts.py # Argentina data analysis
+│   └── experiments/           # Prototype scripts
 │
 ├── pipelines/
+│   ├── lidar.py               # LiDAR processing library
 │   ├── thermal.py             # Thermal processing library
+│   ├── fusion.py              # Fusion (stub - not implemented)
 │   └── utils/                 # Shared utilities
 │
 ├── tests/
-│   ├── test_golden_aoi.py     # Core integration tests
-│   └── test_thermal.py        # Thermal processing tests
+│   ├── test_golden_aoi.py     # 12 LiDAR reproducibility tests
+│   └── test_thermal_radiometric.py # Thermal extraction tests
 │
 ├── docs/
-│   ├── FIELD_SOP.md           # Field procedures
-│   ├── equipment.md           # Equipment specifications
-│   └── THERMAL_*.md           # Thermal investigation reports
+│   ├── planning/              # Integration plans, visualization strategy
+│   ├── reports/               # Status reports, assessments
+│   └── supplementary/         # Technical investigations
 │
-└── qc/
-    └── panels/                # QC visualizations
+├── verification_images/       # Ground truth annotations
+│
+└── qc/panels/                 # QC visualizations and web maps
 ```
 
 ---
@@ -238,16 +261,16 @@ penguins-4.0/
 
 **For Users:**
 - [RUNBOOK.md](RUNBOOK.md) - Only tested commands, no aspirational targets
-- [docs/FIELD_SOP.md](docs/FIELD_SOP.md) - Field procedures and capture settings
+- [CLAUDE.md](CLAUDE.md) - AI assistant guidance and project context
 
 **For Developers:**
 - [PRD.md](PRD.md) - Product requirements and acceptance criteria
-- [STATUS.md](STATUS.md) - Current implementation state (honest assessment)
-- [AI_POLICY.md](AI_POLICY.md) - AI collaboration guidelines
+- [docs/reports/STATUS.md](docs/reports/STATUS.md) - Current implementation state
+- [docs/planning/VISUALIZATION_STRATEGY.md](docs/planning/VISUALIZATION_STRATEGY.md) - Visualization requirements
 
 **Technical Reports:**
-- [docs/THERMAL_INVESTIGATION_FINAL.md](docs/THERMAL_INVESTIGATION_FINAL.md) - Thermal signal analysis
-- [validation_results.md](validation_results.md) - Validation test results
+- [docs/supplementary/THERMAL_INVESTIGATION_FINAL.md](docs/supplementary/THERMAL_INVESTIGATION_FINAL.md) - Thermal signal analysis
+- [docs/reports/GIS_ANALYST_ASSESSMENT_2025-12-09.md](docs/reports/GIS_ANALYST_ASSESSMENT_2025-12-09.md) - External review
 
 ---
 
@@ -303,7 +326,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### "Detection count differs from expected 879"
+### "Detection count differs from expected 802"
 
 **Possible causes:**
 1. Different data file (cloud3.las checksum mismatch)
@@ -321,7 +344,7 @@ cat data/interim/provenance_lidar.json
 
 **Solution:** Copy files to `data/intake/` instead:
 ```bash
-cp data/legacy_ro/penguin-2.0/sample/cloud3.las data/intake/
+cp data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las data/intake/
 ```
 
 ### Thermal Processing Fails
@@ -387,24 +410,26 @@ See [AI_POLICY.md](AI_POLICY.md) for AI collaboration guidelines.
 
 ---
 
-## Current Status (As of 2025-10-14)
+## Current Status (As of 2025-12-11)
 
 **Production Ready:**
-- ✅ LiDAR detection pipeline (879 detections, reproducible)
+- ✅ LiDAR detection pipeline (802 detections on golden AOI, reproducible)
 - ✅ Automated testing (12 tests passing)
+- ✅ Interactive web maps (Folium)
 - ✅ Provenance tracking
-- ✅ QC visualization
-- ✅ Field deployment guide
 
-**Investigation Complete:**
-- 📊 Thermal characterization study (detection constraints quantified, infrastructure validated)
-- 📚 Comprehensive documentation (field procedures, equipment specs, technical reports)
+**In Progress:**
+- 🔄 Argentina ground truth integration (~3,705 penguins, GPS waypoints extracted)
+- 🔄 Visualization strategy (see `docs/planning/VISUALIZATION_STRATEGY.md`)
 
-**Future Development:**
-- 🔬 Thermal research opportunities with advanced instrumentation
-- ⏳ Harvest automation (manual process works)
+**Research Phase:**
+- ⚠️ Thermal detection (~9°C calibration offset unresolved)
+- ⚠️ Ground truth georeferencing (GPS → pixel coordinates)
 
-See [STATUS.md](STATUS.md) for detailed current state and [docs/FIELD_DEPLOYMENT_GUIDE.md](docs/FIELD_DEPLOYMENT_GUIDE.md) for deployment procedures.
+**Not Implemented:**
+- ❌ Fusion pipeline (spatial join of LiDAR + thermal)
+
+See [CLAUDE.md](CLAUDE.md) for detailed project context and current priorities.
 
 ---
 
@@ -416,12 +441,17 @@ Internal project - contact project owner for usage permissions.
 
 ## Version History
 
+- **v0.2** (2025-12-11): Argentina field data integration
+  - GPS waypoint extraction from field notes
+  - Interactive Folium web maps for detection QC
+  - Visualization strategy documentation
+  - Updated ground truth: ~3,705 penguins across 9 sites
+
 - **v0.1** (2025-10-14): Initial production release
-  - LiDAR HAG detection validated
-  - Golden AOI test suite
+  - LiDAR HAG detection validated (802 on golden AOI)
+  - Golden AOI test suite (12 tests)
   - Thermal orthorectification infrastructure
 
 ---
 
-**Questions?** Review the documentation above or check STATUS.md for honest assessment of current capabilities.
-
+**Questions?** See [CLAUDE.md](CLAUDE.md) for project context or check `docs/reports/STATUS.md` for current state.

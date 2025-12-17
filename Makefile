@@ -46,16 +46,21 @@ test:
 	fi
 	@pytest tests/test_golden_aoi.py -v
 
-# Test LiDAR detection on sample data (proven working)
+# Test LiDAR detection on golden AOI (cloud3.las)
 test-lidar:
-	@echo "Running LiDAR HAG detection on sample data..."
-	@python3 scripts/run_lidar_hag.py \
-		--data-root data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample \
-		--out data/interim/lidar_test.json \
-		--cell-res 0.25 \
-		--hag-min 0.2 --hag-max 0.6 \
-		--min-area-cells 2 --max-area-cells 80 \
-		--emit-geojson --plots
+	@echo "Running LiDAR HAG detection on golden AOI (cloud3.las)..."
+	@tmpdir=$$(mktemp -d); \
+		src=$$(python3 -c "from pathlib import Path; print(Path('data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las').resolve())"); \
+		if [ ! -f "$$src" ]; then echo "Missing golden AOI file: $$src"; rm -rf "$$tmpdir"; exit 1; fi; \
+		ln -sf "$$src" "$$tmpdir/cloud3.las"; \
+		MPLCONFIGDIR="data/interim/mplconfig" python3 scripts/run_lidar_hag.py \
+			--data-root "$$tmpdir" \
+			--out data/interim/lidar_test.json \
+			--cell-res 0.25 \
+			--hag-min 0.2 --hag-max 0.6 \
+			--min-area-cells 2 --max-area-cells 80 \
+			--emit-geojson --plots; \
+		rm -rf "$$tmpdir"
 	@echo ""
 	@echo "✓ LiDAR detection complete"
 	@echo "  Results: data/interim/lidar_test.json"

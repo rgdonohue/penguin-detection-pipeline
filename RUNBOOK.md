@@ -2,7 +2,25 @@
 
 **Single source of truth for commands that actually work.**
 
-Last updated: 2025-10-08
+Last updated: 2025-12-17
+
+---
+
+## Test Suite Status
+
+| Test | Status | Notes |
+|------|--------|-------|
+| `tests/test_golden_aoi.py` | PASSING | Golden AOI regression guardrail (cloud3.las is sourced from `data/legacy_ro/`) |
+| `tests/test_lidar_dem_hag_unit.py` | PASSING | Unit coverage for DEM/HAG edge cases |
+| `tests/test_thermal.py` | PASSING | GDAL-dependent tests may skip |
+| `tests/test_thermal_radiometric.py` | PASSING | Data-dependent integration cases may skip |
+| `tests/test_data_2025_invariants.py` | PASSING | Asserts catalogue + ground truth totals |
+
+Quick run:
+```bash
+source .venv/bin/activate
+pytest -q tests/test_golden_aoi.py tests/test_data_2025_invariants.py
+```
 
 ---
 
@@ -28,7 +46,7 @@ Last updated: 2025-10-08
 # 3. Install dependencies from requirements.txt
 # 4. Validate all required modules
 # 5. Check legacy data mounts
-# 6. Run LiDAR smoke test (879 detections expected)
+# 6. Run LiDAR smoke test (802 detections expected on golden AOI)
 # 7. Run golden AOI test suite (12 tests)
 ```
 
@@ -127,7 +145,7 @@ python3 scripts/run_lidar_hag.py \
 ```json
 {
   "files": 1,
-  "total_count": 879
+  "total_count": 802
 }
 ```
 
@@ -139,7 +157,74 @@ python3 scripts/run_lidar_hag.py \
 - `data/interim/provenance_lidar.json` - Run metadata
 - `data/interim/timings.json` - Performance data
 
-**Status:** ✅ TESTED (2025-10-08, 3 successful runs)
+**Status:** ✅ TESTED (legacy: 2025-10-08; Argentina: 2025-12-10)
+
+---
+
+## Argentina LiDAR Detection (Validated 2025-12-10)
+
+### DJI L2 Sensors (Caleta Sites)
+
+Tuned parameters for DJI L2 LiDAR (Caleta Tiny Island, Small Island, Box Counts):
+
+```bash
+source .venv/bin/activate
+
+# Caleta Small Island (validated: 1,473 detections vs 1,557 ground truth = -5%)
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Small Island" \
+  --out data/interim/caleta_small_island.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --emit-geojson --plots
+
+# Caleta Tiny Island (validated: 340 detections vs 321 ground truth = +6%)
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/caleta_tiny_island.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --emit-geojson --plots
+```
+
+**Key DJI L2 Parameters:**
+- Cell resolution: 0.25m
+- HAG range: 0.28-0.48m (narrower than legacy 0.2-0.6m)
+- Min area: 3 cells
+- Dedupe radius: 0.5m (prevents double-counting at tile boundaries)
+
+### TrueView 515 Sensors (San Lorenzo)
+
+TrueView 515 data requires CRS reprojection from POSGAR to UTM:
+
+```bash
+# Step 1: Reproject from POSGAR 2007/Argentina 3 to UTM 20S
+pdal translate "data/2025/San Lorenzo Box Count 11.9.25 LAS.las" \
+  "data/2025/San_Lorenzo_UTM/box_count_11.9.las" \
+  --filters.reprojection.in_srs="EPSG:5345" \
+  --filters.reprojection.out_srs="EPSG:32720" \
+  -f filters.reprojection
+
+# Step 2: Run detection (validated: 108 detections vs 107 ground truth = +1%)
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/San_Lorenzo_UTM" \
+  --out data/interim/san_lorenzo_box_count.json \
+  --cell-res 0.3 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 50 \
+  --dedupe-radius-m 0.5 --emit-geojson --plots
+```
+
+**Key TrueView 515 Parameters:**
+- Cell resolution: 0.30m (larger than DJI L2 due to different point density)
+- HAG range: 0.28-0.48m
+- Requires PDAL for CRS reprojection
+
+**Data Catalogue:**
+- Location: `data/2025/lidar_catalogue_full.json`
+- Total: 24 files, 754M points, 25.8 GB
+- Session report: `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md`
+
+---
 
 ### 2. Thermal Orthorectification (Extracted, Not Yet Tested)
 
@@ -346,8 +431,8 @@ ls -l data/legacy_ro/
 ### LiDAR Test Data
 
 ```bash
-# Sample data (4.4 GB)
-data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample/cloud3.las
+# Golden AOI file (cloud3.las, ~4.4 GB)
+data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las
 
 # Full dataset (35 GB total)
 data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud[0-4].las
@@ -356,7 +441,7 @@ data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud[0-4].las
 ### H30T Thermal Test Flights
 
 ```
-data/H30T_Test_Files/                              # Client drop (read-only)
+data/legacy_ro/H30T_Test_Files/                    # Client drop (read-only)
 ├── DJI_202510221803_001_Create-Area-Route27/      # Normal radiometric capture
 ├── DJI_202510221803_002_Create-Area-Route27/      # High-contrast digital gain
 └── DJI_202510221803_003/                          # Stills with mode toggles
@@ -403,7 +488,7 @@ data/intake/h30t/                                  # Symlinks for reproducible r
 # Check detection count
 jq '.total_count' data/interim/lidar_test.json
 
-# Expected: 879
+# Expected: 802
 
 # Check file sizes
 ls -lh data/interim/lidar_hag_plots/

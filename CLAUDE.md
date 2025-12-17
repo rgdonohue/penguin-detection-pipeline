@@ -10,8 +10,9 @@ This is the Penguin Detection Pipeline project (v4.0) - a production-oriented sy
 2. **Thermal Orthorectification** - Projects thermal imagery onto DSM (Digital Surface Model)
 3. **Data Fusion** - Combines LiDAR and thermal detections with statistical analysis
 
-### Target Count Benchmark
-The validated penguin count across the study area is **~1,533 penguins** (established through manual ground truth). All detection pipelines should trend toward this benchmark when summed across frames.
+### Ground Truth Benchmarks
+- **Legacy (Punta Tombo):** ~1,533 penguins (established through manual ground truth)
+- **Argentina 2025:** ~3,705 penguins across San Lorenzo and Caleta sites (field counts; GPS→pixel projection NOT yet implemented)
 
 ## Current Implementation Status (2025-12)
 
@@ -19,16 +20,16 @@ The validated penguin count across the study area is **~1,533 penguins** (establ
 
 | Stage | Status | Notes |
 |-------|--------|-------|
-| **LiDAR Detection** | ✅ Production-ready | 879 detections on golden AOI (reproducible); `scripts/run_lidar_hag.py` proven |
+| **LiDAR Detection** | ✅ Production-ready | 802 detections on golden AOI (guardrail); `scripts/run_lidar_hag.py` proven |
 | **Thermal Extraction** | ⚠️ Research phase | 16-bit radiometric extraction working; ~9°C calibration offset unresolved |
 | **Thermal Detection** | ⚠️ Research phase | F1 scores 0.02-0.30 depending on frame contrast; 60/137 ground truth validated |
 | **Fusion** | ❌ Not implemented | `pipelines/fusion.py` is a stub; spatial join logic pending |
-| **Ground Truth** | 🔄 In progress | Argentina GPS waypoints available (~3,705 penguins); georeferencing needed |
+| **Ground Truth** | 🔄 In progress | Argentina field counts (~3,705 penguins); GPS→pixel projection needed |
 
 ### Active Development Priorities
-1. **Argentina Data Integration** - Georeferencing Lydia's GPS waypoints to thermal imagery
-2. **Thermal Calibration** - Resolving the ~9°C offset issue
-3. **Ground Truth Completion** - Remaining 77 penguins need pixel coordinate annotation
+1. **Argentina Data Integration** - Boundary/route waypoints (48) in `data/processed/san_lorenzo_waypoints.csv`; penguin counts (~3,705) in `san_lorenzo_analysis.json`; GPS→pixel projection pending
+2. **Visualization Strategy** - See `docs/planning/VISUALIZATION_STRATEGY.md` for requirements
+3. **Thermal Calibration** - Resolving the ~9°C offset issue
 4. **Fusion Pipeline** - Implementing spatial join between LiDAR and thermal detections
 
 ## Critical Development Principles
@@ -46,10 +47,10 @@ The validated penguin count across the study area is **~1,533 penguins** (establ
 ```
 penguins-4.0/
 ├── scripts/               # Entry point scripts for each pipeline stage
-│   ├── run_lidar_hag.py   # ✅ PROVEN - LiDAR detection (879 candidates)
+│   ├── run_lidar_hag.py   # ✅ PROVEN - LiDAR detection (802 candidates)
 │   ├── run_thermal_ortho.py  # ⚠️ Orthorectification (needs validation)
-│   ├── run_thermal_detection_batch.py  # ⚠️ Batch processing (needs params)
-│   ├── optimize_thermal_detection.py   # Parameter sweep script
+│   ├── create_detection_map.py  # Folium web map from GeoJSON
+│   ├── analyze_san_lorenzo_counts.py  # Argentina ground truth analysis
 │   └── experiments/       # Prototype/experimental scripts
 ├── pipelines/             # Core pipeline implementations (library-style)
 │   ├── lidar.py           # LidarParams dataclass + subprocess wrapper
@@ -67,8 +68,8 @@ penguins-4.0/
 │   ├── interim/           # Temporary processing artifacts
 │   └── processed/         # Final outputs (COG, VRT, GPKG, CSV)
 ├── docs/
-│   ├── planning/          # Argentina integration plans, georeferencing
-│   ├── reports/STATUS.md  # Current implementation state
+│   ├── planning/          # Argentina integration plans, visualization strategy
+│   ├── reports/           # STATUS.md, session reports, assessments
 │   └── supplementary/     # Thermal investigation, field SOPs
 ├── manifests/             # Provenance tracking and QC reports
 │   └── harvest_manifest.csv
@@ -96,15 +97,9 @@ python3 -c "import laspy, scipy, skimage, pytest; print('✓ Core dependencies O
 ### Working Commands (Tested)
 
 ```bash
-# LiDAR detection on golden AOI (PROVEN - 879 detections)
+# LiDAR detection on golden AOI (PROVEN - 802 detections)
 make test-lidar
-# Or directly:
-python3 scripts/run_lidar_hag.py \
-  --data-root data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample \
-  --out data/interim/lidar_test.json \
-  --cell-res 0.25 --hag-min 0.2 --hag-max 0.6 \
-  --min-area-cells 2 --max-area-cells 80 \
-  --emit-geojson --plots
+# Or: pytest tests/test_golden_aoi.py -v
 
 # Run golden AOI tests (12 tests)
 pytest tests/test_golden_aoi.py -v
@@ -152,31 +147,41 @@ make thermal
 
 | Gate | Criteria | Status |
 |------|----------|--------|
-| LiDAR | Reproducible 879 ± tolerance on cloud3.las | ✅ Passing |
+| LiDAR | Reproducible 802 ± tolerance on cloud3.las | ✅ Passing |
 | Thermal Ortho | RMSE ≤ 2 px on control points | ⚠️ Needs validation |
 | Thermal Detection | Total count within 20% of 1533 | ❌ Not yet achieved |
 | Fusion | Complete rows with Both/LiDAROnly/ThermalOnly labels | ❌ Not implemented |
 
-## Argentina Field Data (New)
+## Argentina Field Data (2025)
 
 ### Available Ground Truth (~3,705 penguins)
-| Site | Count | Sensors | Notes |
-|------|-------|---------|-------|
-| Caleta Tiny Island | 321 | L2, H30T | 0.7 ha |
-| Caleta Small Island | 1,557 | L2, H30T | 4 ha |
-| San Lorenzo Road | 359 | TrueView 515, H30T | GPS waypoints |
-| San Lorenzo Plains | 453 | TrueView 515, H30T | Edge waypoints |
-| San Lorenzo Caves | 908 | TrueView 515, H30T | Start/end waypoints |
-| Box counts | 107 | H30T | High-density validation |
+| Site | Count | Area | Density | Sensors |
+|------|-------|------|---------|---------|
+| San Lorenzo Caves | 908 | 0.60 ha | 1,518/ha | TrueView 515, H30T |
+| San Lorenzo Plains | 453 | 0.98 ha | 464/ha | TrueView 515, H30T |
+| San Lorenzo Road | 359 | - | - | TrueView 515, H30T |
+| San Lorenzo Box Counts | 87 | 4.95 ha | 15-28/ha | H30T |
+| Caleta Small Island | 1,557 | 4.0 ha | 389/ha | L2, H30T |
+| Caleta Tiny Island | 321 | 0.7 ha | 459/ha | L2, H30T |
+| Caleta Box Counts | 20 | - | - | H30T |
 
-### Integration Plan
+**Key observation:** Density varies 100x across sites (15 to 1,518 penguins/ha).
+
+### Data Files
+- `data/processed/san_lorenzo_waypoints.csv` - 48 boundary/route waypoints (NOT penguin locations)
+- `data/processed/san_lorenzo_analysis.json` - Penguin counts (~3,705) and density analysis by site
+- `docs/GPS Ground Truthing Notes 2025 - RD.pdf` - Original field notes
+
+**IMPORTANT:** The ~3,705 figure is total penguin COUNT from field observations, NOT georeferenced pixel locations. The `san_lorenzo_waypoints.csv` contains survey boundary points, not individual penguin positions.
+
+### Integration Status
 See `docs/planning/ARGENTINA_DATA_INTEGRATION_SUMMARY.md` for full georeferencing workflow.
 
-**Key Tasks:**
-1. Extract GPS waypoints from PDF → structured format
-2. Match waypoints to thermal images (spatial/temporal)
-3. Project GPS → pixel coordinates using camera model
-4. Validate accuracy (<5 pixel error for RTK GPS)
+- [x] Extract site boundary waypoints from PDF → structured format (48 waypoints)
+- [x] Extract penguin counts by site → JSON format (~3,705 total)
+- [ ] Implement GPS→pixel projection using camera model in `thermal.py`
+- [ ] Generate per-image ground truth CSVs
+- [ ] Validate accuracy (<5 pixel error for RTK GPS)
 
 ## Dependencies
 
@@ -203,9 +208,11 @@ conda install -c conda-forge gdal rasterio pyproj geopandas
 | `PRD.md` | Product requirements and success criteria |
 | `RUNBOOK.md` | Authoritative tested commands |
 | `docs/reports/STATUS.md` | Current implementation state |
+| `docs/planning/VISUALIZATION_STRATEGY.md` | Visualization requirements and approach |
 | `notes/pipeline_todo.md` | Single task tracker |
 | `manifests/harvest_manifest.csv` | Provenance for imported artifacts |
 | `verification_images/` | Ground truth CSVs (frame_0353-0359_locations.csv) |
+| `qc/panels/` | QC visualizations including detection maps |
 
 ## MCP Tool Integration Recommendations
 
@@ -282,5 +289,5 @@ For enhanced GIS/remote sensing capabilities, consider integrating these MCP ser
 
 ---
 
-**Last Updated:** 2025-12-09
+**Last Updated:** 2025-12-11
 **Principle:** One blessed path, hard gates, perfect provenance.
