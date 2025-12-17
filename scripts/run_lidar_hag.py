@@ -179,14 +179,47 @@ def _bin_indices(x: np.ndarray, y: np.ndarray, mins: np.ndarray, cell_res: float
     return ix[valid], iy[valid], valid
 
 
-def _online_quantile_update(q: np.ndarray, x: np.ndarray, p: float, lr: float) -> None:
-    """Online quantile tracker per cell. q and x are aligned arrays for cells seen in this chunk.
-    q <- q + lr * sign * (x - q), where sign depends on whether x above/below q.
+def _online_quantile_update_indexed(
+    q_flat: np.ndarray,
+    idx: np.ndarray,
+    x: np.ndarray,
+    p: float,
+    lr: float,
+) -> None:
+    """Update per-cell quantiles for a stream chunk, handling duplicate cell indices.
+
+    ``idx`` is a flattened cell index per sample in ``x`` and typically contains
+    duplicates (many points per cell). This function aggregates updates per
+    unique cell index so all points contribute deterministically within a chunk.
     """
-    above = x > q
-    # Move q toward x: small step weighted by desired quantile probability
-    q[above] += lr * p * (x[above] - q[above])
-    q[~above] -= lr * (1.0 - p) * (q[~above] - x[~above])
+    if idx.size == 0:
+        return
+
+    idx = np.asarray(idx, dtype=np.int64)
+    x = np.asarray(x, dtype=np.float32)
+
+    uniq, inv = np.unique(idx, return_inverse=True)
+    q_u = np.asarray(q_flat[uniq], dtype=np.float32).copy()
+
+    nan_mask = np.isnan(q_u)
+    if nan_mask.any():
+        if p <= 0.5:
+            init = np.full(uniq.shape[0], np.inf, dtype=np.float32)
+            np.minimum.at(init, inv, x)
+        else:
+            init = np.full(uniq.shape[0], -np.inf, dtype=np.float32)
+            np.maximum.at(init, inv, x)
+        q_u[nan_mask] = init[nan_mask]
+
+    q0 = q_u[inv]
+    below = x <= q0
+    counts = np.bincount(inv, minlength=uniq.shape[0]).astype(np.float32)
+    below_counts = np.bincount(inv, weights=below.astype(np.float32), minlength=uniq.shape[0]).astype(
+        np.float32
+    )
+    frac_below = below_counts / np.maximum(counts, 1.0)
+    q_u = q_u + float(lr) * (float(p) - frac_below)
+    q_flat[uniq] = q_u
 
 
 def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: bool,
@@ -214,18 +247,15 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
         if flat.size:
             dem_flat = dem.ravel()
             np.minimum.at(dem_flat, flat, z_valid.astype(np.float32))
-            # Online q05 update if enabled (bootstrap then track)
             if ground_method.lower() != "min":
                 q05_flat = q05.ravel()
-                idx = flat
-                # initialize missing
-                init_sel = np.isnan(q05_flat[idx])
-                if np.any(init_sel):
-                    q05_flat[idx[init_sel]] = z_valid.astype(np.float32)[init_sel]
-                q_vals = q05_flat[idx]
-                x_vals = z_valid.astype(np.float32)
-                _online_quantile_update(q_vals, x_vals, p=0.05, lr=quantile_lr)
-                q05_flat[idx] = q_vals
+                _online_quantile_update_indexed(
+                    q05_flat,
+                    flat,
+                    z_valid.astype(np.float32),
+                    p=0.05,
+                    lr=quantile_lr,
+                )
 
     # Replace inf (no data) with fallback values
     if np.isinf(dem).all():
@@ -274,13 +304,7 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
         if flat.size:
             if use_p95:
                 q95_flat = q95.ravel()  # type: ignore[arg-type]
-                # initialize missing
-                init_sel = np.isnan(q95_flat[flat])
-                if np.any(init_sel):
-                    q95_flat[flat[init_sel]] = hag_chunk[init_sel]
-                q_vals = q95_flat[flat]
-                _online_quantile_update(q_vals, hag_chunk, p=0.95, lr=0.05)
-                q95_flat[flat] = q_vals
+                _online_quantile_update_indexed(q95_flat, flat, hag_chunk, p=0.95, lr=0.05)
             else:
                 hag_flat = hag.ravel()
                 np.maximum.at(hag_flat, flat, hag_chunk)

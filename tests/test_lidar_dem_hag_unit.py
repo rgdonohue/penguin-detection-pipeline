@@ -100,10 +100,6 @@ def test_single_point_cell_hag_is_zero(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert float(hag.max()) == pytest.approx(0.0)
 
 
-@pytest.mark.xfail(
-    reason="Known issue: online quantile update is order-dependent when multiple points land in the same cell.",
-    strict=False,
-)
 def test_quantile_ground_is_order_invariant_for_duplicate_cell_hits(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -133,4 +129,3 @@ def test_quantile_ground_is_order_invariant_for_duplicate_cell_hits(
     )
 
     assert np.allclose(dem_a, dem_b)
-

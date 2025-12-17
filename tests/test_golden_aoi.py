@@ -26,9 +26,9 @@ import shutil
 
 # Test configuration
 TEST_OUTPUT_DIR = Path("data/interim/test_golden")
-EXPECTED_DETECTION_COUNT = 879
+EXPECTED_DETECTION_COUNT = 802
 TOLERANCE = 5  # Allow ±5 detections for minor numerical variations
-EXPECTED_SIGNATURE_SHA256 = "e81d33eaf81a16b09fc509a41c8ca51abc27b6fe7cd56184dcc8a733edb7dcc5"
+EXPECTED_SIGNATURE_SHA256 = "2fa9ef298f37ef70d654c44728d69938db852cd2ee0b40e170dfea94b115c2fc"
 
 
 def _find_golden_cloud3() -> Optional[Path]:
