@@ -14,27 +14,102 @@ Run with: pytest -v tests/test_golden_aoi.py
 """
 
 import json
+import hashlib
+import os
 import subprocess
 from pathlib import Path
+import sys
+from typing import Optional
 import pytest
 import shutil
 
 
 # Test configuration
-GOLDEN_DATA_ROOT = Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample")
-GOLDEN_LAZ_FILE = GOLDEN_DATA_ROOT / "cloud3.las"
 TEST_OUTPUT_DIR = Path("data/interim/test_golden")
 EXPECTED_DETECTION_COUNT = 879
 TOLERANCE = 5  # Allow ±5 detections for minor numerical variations
+EXPECTED_SIGNATURE_SHA256 = "e81d33eaf81a16b09fc509a41c8ca51abc27b6fe7cd56184dcc8a733edb7dcc5"
+
+
+def _find_golden_cloud3() -> Optional[Path]:
+    candidates = [
+        Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample/cloud3.las"),
+        Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    root = Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR")
+    if not root.exists():
+        return None
+    matches = list(root.rglob("cloud3.las"))
+    return matches[0] if matches else None
+
+
+def _link_or_skip(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(src.resolve(), dst)
+    except OSError:
+        try:
+            os.link(src.resolve(), dst)
+        except OSError as exc:
+            pytest.skip(f"Cannot create symlink/hardlink for golden file: {exc}")
+
+
+def _stable_signature(summary: dict) -> str:
+    def norm_float(value: object) -> Optional[float]:
+        if value is None:
+            return None
+        return round(float(value), 3)
+
+    files = []
+    for entry in summary.get("files", []):
+        dets = []
+        for det in entry.get("detections", []) or []:
+            dets.append(
+                {
+                    "x": norm_float(det.get("x")),
+                    "y": norm_float(det.get("y")),
+                    "area_cells": int(det.get("area_cells", 0)),
+                }
+            )
+        dets.sort(key=lambda d: (d["x"], d["y"], d["area_cells"]))
+        files.append(
+            {
+                "count": int(entry.get("count", 0)),
+                "grid_shape": entry.get("grid_shape"),
+                "detections": dets,
+            }
+        )
+
+    payload = {
+        "params": summary.get("params"),
+        "total_count": int(summary.get("total_count", 0)),
+        "files": files,
+    }
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_test_env():
+def setup_test_env(tmp_path_factory):
     """Set up test environment, clean up after."""
     # Clean test output directory before tests
     if TEST_OUTPUT_DIR.exists():
         shutil.rmtree(TEST_OUTPUT_DIR)
     TEST_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Create a minimal data-root containing only the golden cloud3.las so the
+    # CLI doesn't recurse over the full legacy LiDAR directory.
+    golden_src = _find_golden_cloud3()
+    if golden_src is None:
+        pytest.skip("Golden cloud3.las not available under data/legacy_ro")
+
+    fixture_root = tmp_path_factory.mktemp("golden_lidar_root")
+    _link_or_skip(golden_src, fixture_root / "cloud3.las")
+    os.environ["PENGUINS_GOLDEN_LIDAR_ROOT"] = str(fixture_root)
 
     yield
 
@@ -47,17 +122,25 @@ class TestLiDARPipeline:
 
     def test_golden_data_exists(self):
         """Verify golden test data is accessible."""
-        assert GOLDEN_DATA_ROOT.exists(), f"Golden data root not found: {GOLDEN_DATA_ROOT}"
-        assert GOLDEN_LAZ_FILE.exists(), f"Golden LAZ file not found: {GOLDEN_LAZ_FILE}"
+        golden_root = Path(os.environ["PENGUINS_GOLDEN_LIDAR_ROOT"])
+        golden_file = golden_root / "cloud3.las"
+        assert golden_root.exists(), f"Golden data root not found: {golden_root}"
+        assert golden_file.exists(), f"Golden LAS file not found: {golden_file}"
 
         # Check file is non-empty
-        assert GOLDEN_LAZ_FILE.stat().st_size > 0, "Golden LAZ file is empty"
+        assert golden_file.stat().st_size > 0, "Golden LAS file is empty"
 
     def test_lidar_script_runs(self):
         """Test that LiDAR detection script runs without errors."""
+        golden_root = Path(os.environ["PENGUINS_GOLDEN_LIDAR_ROOT"])
+        mpl_dir = TEST_OUTPUT_DIR / "mplconfig"
+        mpl_dir.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ)
+        env["MPLCONFIGDIR"] = str(mpl_dir)
+
         cmd = [
-            "python3", "scripts/run_lidar_hag.py",
-            "--data-root", str(GOLDEN_DATA_ROOT),
+            sys.executable, "scripts/run_lidar_hag.py",
+            "--data-root", str(golden_root),
             "--out", str(TEST_OUTPUT_DIR / "golden_results.json"),
             "--cell-res", "0.25",
             "--hag-min", "0.2",
@@ -72,6 +155,7 @@ class TestLiDARPipeline:
             cmd,
             capture_output=True,
             text=True,
+            env=env,
             timeout=300  # 5 min timeout
         )
 
@@ -178,34 +262,14 @@ class TestLiDARPipeline:
         assert "params" in prov, "Missing params in provenance"
 
     def test_reproducibility(self):
-        """Verify pipeline produces identical results across runs."""
-        # Run pipeline a second time
-        cmd = [
-            "python3", "scripts/run_lidar_hag.py",
-            "--data-root", str(GOLDEN_DATA_ROOT),
-            "--out", str(TEST_OUTPUT_DIR / "golden_results_run2.json"),
-            "--cell-res", "0.25",
-            "--hag-min", "0.2",
-            "--hag-max", "0.6",
-            "--min-area-cells", "2",
-            "--max-area-cells", "80",
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, timeout=300)
-        assert result.returncode == 0, "Second run failed"
-
-        # Compare counts
+        """Verify output signature matches expected baseline without re-running."""
         with open(TEST_OUTPUT_DIR / "golden_results.json") as f:
             run1 = json.load(f)
 
-        with open(TEST_OUTPUT_DIR / "golden_results_run2.json") as f:
-            run2 = json.load(f)
-
-        count1 = run1["total_count"]
-        count2 = run2["total_count"]
-
-        assert count1 == count2, (
-            f"Non-reproducible results: run1={count1}, run2={count2}"
+        signature = _stable_signature(run1)
+        assert signature == EXPECTED_SIGNATURE_SHA256, (
+            f"Golden signature drifted: got {signature}, expected {EXPECTED_SIGNATURE_SHA256}. "
+            "If this is intentional, update EXPECTED_SIGNATURE_SHA256."
         )
 
     def test_processing_time_reasonable(self):
