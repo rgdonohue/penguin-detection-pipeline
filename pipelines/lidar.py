@@ -52,6 +52,7 @@ class LidarParams:
     border_trim_px: int = 0
     slope_max_deg: Optional[float] = None
     dedupe_radius_m: Optional[float] = None
+    timeout_s: Optional[float] = None
 
 
 def run(params: LidarParams) -> Path:
@@ -135,5 +136,30 @@ def run(params: LidarParams) -> Path:
     for name in params.exclude_dirs:
         cmd.extend(["--exclude-dir", name])
 
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=params.timeout_s,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(
+            f"LiDAR stage timed out after {params.timeout_s}s: {' '.join(cmd)}"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        details = "\n".join(
+            part
+            for part in [
+                f"cmd: {' '.join(cmd)}",
+                f"exit_code: {exc.returncode}",
+                f"stdout: {stdout}" if stdout else "",
+                f"stderr: {stderr}" if stderr else "",
+            ]
+            if part
+        )
+        raise RuntimeError(f"LiDAR stage failed\n{details}") from exc
     return params.out_path
