@@ -9,10 +9,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 
-# Add pipelines to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "pipelines"))
-
-from thermal_processing import extract_thermal_data, detect_thermal_objects
+# NOTE: This script predates the current `pipelines/thermal.py` API and is kept
+# only as a historical artifact. Use:
+# - `scripts/optimize_thermal_detection.py`
+# - `scripts/run_thermal_detection_batch.py`
+# for current thermal detection experiments.
 
 
 def load_ground_truth(pixel_coords):
@@ -122,6 +123,12 @@ def visualize_results(image_path, ground_truth, detections, output_path):
 
 
 def main():
+    print(
+        "DEPRECATED: scripts/experiments/test_thermal_detection.py is not compatible with the current codebase.\n"
+        "Use scripts/optimize_thermal_detection.py or scripts/run_thermal_detection_batch.py instead."
+    )
+    return 2
+
     # Image path
     image_path = Path("data/legacy_ro/penguin-2.0/data/raw/thermal-images/"
                      "DJI_202411061712_006_Create-Area-Route5/"
