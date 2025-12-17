@@ -47,6 +47,8 @@ def test_fusion_join_basic(tmp_path: Path):
 
     out = json.loads(out_path.read_text())
     assert out["crs"] == "EPSG:32720"
+    assert out["purpose"] == "qc_alignment"
+    assert out["temperature_calibrated"] is False
     assert out["lidar_count"] == 3
     assert out["thermal_count"] == 2
     assert out["lidar_matched_count"] == 2

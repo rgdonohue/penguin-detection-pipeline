@@ -49,6 +49,10 @@ def run(params: FusionParams) -> Path:
         match_radius_m=float(params.match_radius_m),
     )
 
+    out["schema_version"] = "1"
+    out["purpose"] = "qc_alignment"
+    out["temperature_calibrated"] = False
+
     out["lidar_crs"] = lidar_crs
     out["thermal_crs"] = thermal_crs
     out["crs"] = lidar_crs or thermal_crs

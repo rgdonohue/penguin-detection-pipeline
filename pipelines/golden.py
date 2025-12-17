@@ -9,6 +9,8 @@ shell scripts.
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -22,12 +24,17 @@ class GoldenParams:
     processed_root: Path
     qc_root: Path
     manifest_path: Optional[Path] = None
+    pytest_args: Optional[list[str]] = None
 
 
 def run(params: GoldenParams) -> None:
-    """Placeholder golden harness."""
+    """Run the golden AOI guardrail suite.
 
-    raise NotImplementedError(
-        "Golden harness not yet ported into Python. Continue using `make golden` "
-        "until the guardrail suite is migrated."
-    )
+    This is intentionally a *QC/engineering* harness. It validates deterministic
+    LiDAR behavior on the golden tile and basic invariants. It does not imply
+    thermal calibration or scientifically valid thermal-derived counts.
+    """
+
+    args = params.pytest_args or ["-q", "tests/test_golden_aoi.py"]
+    cmd = [sys.executable, "-m", "pytest", *args]
+    subprocess.run(cmd, check=True)

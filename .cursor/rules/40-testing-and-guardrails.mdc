@@ -4,6 +4,6 @@ globs: ["pipelines/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
 alwaysApply: false
 ---
 
-- When you change LiDAR pipeline logic or parameters, ensure the golden AOI guardrail remains valid (`tests/test_golden_aoi.py`).
+- When you change LiDAR pipeline logic or parameters, ensure the golden AOI guardrail remains valid (`tests/test_golden_aoi.py`). The baseline is **802 candidates** on `cloud3.las`; this is a hard gate that must not regress.
 - Prefer adding/regenerating regression tests when you change file schemas, paths, or parameter defaults.
 - Keep tests deterministic: fixed seeds, stable ordering, and avoid reliance on local machine state.
