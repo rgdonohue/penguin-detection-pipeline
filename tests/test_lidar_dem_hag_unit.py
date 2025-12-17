@@ -129,3 +129,34 @@ def test_quantile_ground_is_order_invariant_for_duplicate_cell_hits(
     )
 
     assert np.allclose(dem_a, dem_b)
+
+
+def test_watershed_split_uses_unique_labels_across_regions():
+    hag = np.zeros((30, 30), dtype=np.float32)
+
+    # Two disjoint square blobs, each with two internal peaks to force watershed splitting.
+    hag[2:12, 2:12] = 1.0
+    hag[4, 4] = 1.6
+    hag[9, 9] = 1.6
+
+    hag[2:12, 18:28] = 1.0
+    hag[4, 20] = 1.6
+    hag[9, 25] = 1.6
+
+    count, labeled, dets = lidar.detect_penguins_from_hag(
+        hag,
+        hag_min=0.5,
+        hag_max=2.0,
+        min_area_cells=1,
+        max_area_cells=10_000,
+        connectivity=2,
+        circularity_min=0.0,
+        solidity_min=0.0,
+        apply_watershed=True,
+        h_maxima_h=0.2,
+        min_split_area_cells=20,
+    )
+
+    assert labeled.max() >= 4
+    assert count == 4
+    assert len(dets) == 4

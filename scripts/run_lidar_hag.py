@@ -393,16 +393,20 @@ def detect_penguins_from_hag(hag: np.ndarray,
                 ws_mask = ws > 0
                 if not np.any(ws_mask):
                     continue
-                # Map local labels to global unique labels
+                # Map local labels to globally unique labels.
+                # Note: label ids must be unique across *all* regions, even if they are disjoint;
+                # otherwise scikit-image treats same-id pixels as one region (even when disconnected).
                 unique_ws = np.unique(ws[ws_mask])
-                label_map = {int(l): int(i + labeled.max() + 1) for i, l in enumerate(unique_ws)}
+                label_map = {int(l): int(i + current_max + 1) for i, l in enumerate(unique_ws)}
+                current_max += len(unique_ws)
                 # Clear the original region
                 new_labeled[minr:maxr, minc:maxc][submask] = 0
                 # Write new labels
                 mapped = np.zeros_like(ws, dtype=int)
                 for l, gid in label_map.items():
                     mapped[ws == l] = gid
-                new_labeled[minr:maxr, minc:maxc] |= mapped
+                patch = new_labeled[minr:maxr, minc:maxc]
+                patch[ws_mask] = mapped[ws_mask]
             labeled = new_labeled
     count = 0
     dets: List[Dict] = []
