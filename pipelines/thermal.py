@@ -75,8 +75,34 @@ SUPPORTED_THERMAL_SHAPES: Dict[int, Tuple[int, int]] = {
     640 * 512: (512, 640),        # H20T
     1280 * 1024: (1024, 1280),    # H30T
 }
-DEFAULT_THERMAL_SCALE = 64.0
-ALTERNATE_SCALES = (96.0, 80.0, 128.0)
+
+
+@dataclass(frozen=True)
+class ThermalSensorProfile:
+    """Radiometric conversion defaults for known DJI thermal payloads."""
+
+    name: str
+    shape: Tuple[int, int]
+    default_scale: float
+    alternate_scales: Tuple[float, ...]
+    expected_ambient_c: float = 20.0
+
+
+THERMAL_SENSOR_PROFILES: Dict[Tuple[int, int], ThermalSensorProfile] = {
+    (512, 640): ThermalSensorProfile(
+        name="H20T",
+        shape=(512, 640),
+        default_scale=64.0,
+        alternate_scales=(96.0, 80.0, 128.0),
+    ),
+    (1024, 1280): ThermalSensorProfile(
+        name="H30T",
+        shape=(1024, 1280),
+        default_scale=64.0,
+        alternate_scales=(96.0, 80.0, 128.0),
+    ),
+}
+
 MAX_REASONABLE_TEMP = 120.0
 MIN_REASONABLE_TEMP = -80.0
 MAX_REASONABLE_MEAN = 80.0
@@ -179,6 +205,14 @@ def _load_thermal_raw(image_path: Path, temp_dir: Path) -> np.ndarray:
 def _convert_raw_to_celsius(raw: np.ndarray, image_path: Path) -> Tuple[np.ndarray, float, str]:
     """Convert raw uint16 thermal data to Celsius with scale heuristics."""
     raw_float = raw.astype(np.float32, copy=False)
+    profile = THERMAL_SENSOR_PROFILES.get(tuple(raw.shape))
+    if profile is None:
+        profile = ThermalSensorProfile(
+            name="unknown",
+            shape=tuple(raw.shape),
+            default_scale=64.0,
+            alternate_scales=(96.0, 80.0, 128.0),
+        )
 
     def convert(scale: float) -> np.ndarray:
         kelvin = raw_float / scale
@@ -194,13 +228,13 @@ def _convert_raw_to_celsius(raw: np.ndarray, image_path: Path) -> Tuple[np.ndarr
             and max_val <= MAX_REASONABLE_TEMP
         )
 
-    celsius = convert(DEFAULT_THERMAL_SCALE)
-    scale = DEFAULT_THERMAL_SCALE
+    celsius = convert(profile.default_scale)
+    scale = profile.default_scale
     mode = "normal"
 
     if not temp_range_okay(celsius):
         selected_scale = None
-        for candidate in ALTERNATE_SCALES:
+        for candidate in profile.alternate_scales:
             alt = convert(candidate)
             if temp_range_okay(alt):
                 celsius = alt
@@ -209,8 +243,8 @@ def _convert_raw_to_celsius(raw: np.ndarray, image_path: Path) -> Tuple[np.ndarr
                 break
 
         if selected_scale is None:
-            # Fall back to dynamic scaling anchored to 20°C expectation.
-            target_kelvin = 20.0 + 273.15
+            # Fall back to dynamic scaling anchored to an ambient expectation.
+            target_kelvin = profile.expected_ambient_c + 273.15
             mean_raw = float(raw_float.mean())
             if mean_raw <= 0:
                 raise RuntimeError(
@@ -225,7 +259,7 @@ def _convert_raw_to_celsius(raw: np.ndarray, image_path: Path) -> Tuple[np.ndarr
 
         if mode != "normal":
             warnings.warn(
-                f"Thermal frame {image_path.name} required scale {scale:.2f} "
+                f"Thermal frame {image_path.name} ({profile.name}) required scale {scale:.2f} "
                 f"({mode}); radiometric accuracy should be validated.",
                 RuntimeWarning,
                 stacklevel=2,
