@@ -35,6 +35,11 @@ def run(params: FusionParams) -> Path:
     lidar_obj = _load_json(params.lidar_summary)
     thermal_obj = _load_json(params.thermal_summary)
 
+    lidar_crs = _extract_crs(lidar_obj)
+    thermal_crs = _extract_crs(thermal_obj)
+    if lidar_crs and thermal_crs and lidar_crs != thermal_crs:
+        raise ValueError(f"CRS mismatch: lidar={lidar_crs} thermal={thermal_crs}")
+
     lidar_dets = _extract_detections(lidar_obj, source="lidar")
     thermal_dets = _extract_detections(thermal_obj, source="thermal")
 
@@ -43,6 +48,10 @@ def run(params: FusionParams) -> Path:
         thermal_dets=thermal_dets,
         match_radius_m=float(params.match_radius_m),
     )
+
+    out["lidar_crs"] = lidar_crs
+    out["thermal_crs"] = thermal_crs
+    out["crs"] = lidar_crs or thermal_crs
 
     params.out_path.parent.mkdir(parents=True, exist_ok=True)
     params.out_path.write_text(json.dumps(out, indent=2))
@@ -53,6 +62,22 @@ def _load_json(path: Path) -> Dict[str, Any]:
     if not Path(path).exists():
         raise FileNotFoundError(f"Missing summary JSON: {path}")
     return json.loads(Path(path).read_text())
+
+
+def _extract_crs(summary: Dict[str, Any]) -> Optional[str]:
+    for key in ("crs", "crs_epsg", "epsg", "epsg_code", "crs_code"):
+        value = summary.get(key)
+        if value is None:
+            continue
+        if isinstance(value, int):
+            return f"EPSG:{value}"
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                if cleaned.isdigit():
+                    return f"EPSG:{int(cleaned)}"
+                return cleaned
+    return None
 
 
 def _extract_detections(summary: Dict[str, Any], source: str) -> List[Dict[str, Any]]:
@@ -144,8 +169,3 @@ def _join_detections(
             for i, det in enumerate(thermal_dets)
         ],
     }
-
-    raise NotImplementedError(
-        "Fusion stage not yet modularised. Use `make fusion` while the pipeline "
-        "implementation is migrated into pipelines/fusion.py."
-    )

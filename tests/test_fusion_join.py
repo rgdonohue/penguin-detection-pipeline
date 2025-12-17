@@ -12,6 +12,7 @@ def _write_json(path: Path, obj: dict) -> None:
 
 def test_fusion_join_basic(tmp_path: Path):
     lidar = {
+        "crs": "EPSG:32720",
         "files": [
             {
                 "path": "lidar_tile.las",
@@ -24,6 +25,7 @@ def test_fusion_join_basic(tmp_path: Path):
         ]
     }
     thermal = {
+        "crs": "EPSG:32720",
         "files": [
             {
                 "path": "thermal_frame.tif",
@@ -44,6 +46,7 @@ def test_fusion_join_basic(tmp_path: Path):
     run(FusionParams(lidar_summary=lidar_path, thermal_summary=thermal_path, out_path=out_path, match_radius_m=0.5))
 
     out = json.loads(out_path.read_text())
+    assert out["crs"] == "EPSG:32720"
     assert out["lidar_count"] == 3
     assert out["thermal_count"] == 2
     assert out["lidar_matched_count"] == 2
@@ -69,3 +72,13 @@ def test_fusion_join_many_to_one(tmp_path: Path):
     assert out["thermal_matched_count"] == 1
     assert out["thermal_only_count"] == 0
 
+
+def test_fusion_rejects_crs_mismatch(tmp_path: Path):
+    lidar_path = tmp_path / "lidar.json"
+    thermal_path = tmp_path / "thermal.json"
+    out_path = tmp_path / "fusion.json"
+    _write_json(lidar_path, {"crs": "EPSG:32720", "detections": [{"x": 0.0, "y": 0.0}]})
+    _write_json(thermal_path, {"crs": "EPSG:5345", "detections": [{"x": 0.0, "y": 0.0}]})
+
+    with pytest.raises(ValueError, match="CRS mismatch"):
+        run(FusionParams(lidar_summary=lidar_path, thermal_summary=thermal_path, out_path=out_path))
