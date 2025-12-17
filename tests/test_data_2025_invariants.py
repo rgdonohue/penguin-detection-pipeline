@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -12,6 +13,17 @@ def _read_json(path: Path) -> dict:
     if not path.exists():
         pytest.skip(f"Missing required file: {path}")
     return json.loads(path.read_text())
+
+
+def _infer_epsg_from_name(crs_name: str) -> Optional[int]:
+    name = crs_name.strip()
+    if not name:
+        return None
+    if "WGS 84 / UTM zone 20S" in name:
+        return 32720
+    if "POSGAR 2007 / Argentina 3" in name:
+        return 5345
+    return None
 
 
 def test_lidar_catalogue_full_invariants():
@@ -45,9 +57,14 @@ def test_lidar_catalogue_full_invariants():
             assert "crs_name" in entry, f"File entry missing CRS name in {site_name}"
 
             crs_name = str(entry.get("crs_name", ""))
+            epsg = entry.get("crs_epsg")
+            if epsg is None:
+                epsg = _infer_epsg_from_name(crs_name)
+            if epsg is not None:
+                epsg = int(epsg)
             if sensor == "DJI L2":
                 # DJI L2 is expected to be delivered in UTM 20S (EPSG:32720).
-                assert entry.get("crs_epsg") == 32720, (
+                assert epsg == 32720, (
                     f"Expected EPSG:32720 for DJI L2 in {site_name}; "
                     f"got {entry.get('crs_epsg')} ({crs_name})"
                 )
@@ -57,6 +74,9 @@ def test_lidar_catalogue_full_invariants():
                 assert "POSGAR" in crs_name, (
                     f"Expected POSGAR CRS for TrueView 515 in {site_name}; got {crs_name}"
                 )
+                assert epsg == 5345, f"Expected EPSG:5345 for TrueView 515 in {site_name}; got {epsg} ({crs_name})"
+            else:
+                pytest.fail(f"Unexpected sensor name in catalogue: {sensor}")
 
     assert total_files == 24
     assert total_points == 753_786_458
@@ -90,4 +110,3 @@ def test_san_lorenzo_utm_reprojected_las_files_present():
     for path in expected:
         assert path.exists(), f"Missing expected reprojected file: {path}"
         assert path.stat().st_size > 0, f"Empty reprojected file: {path}"
-
