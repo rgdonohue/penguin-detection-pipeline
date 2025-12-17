@@ -357,6 +357,7 @@ class Pose:
     lat: float
     lon: float
     h_abs: float
+    h_rel: Optional[float]
     yaw_f: float
     pitch_f: float
     roll_f: float
@@ -393,10 +394,16 @@ def load_poses(csv_path: Path) -> Tuple[pd.DataFrame, Dict[str, str]]:
     df = pd.read_csv(csv_path)
     cols = {k: _find_col(df, v) for k, v in POSE_COLS.items()}
 
-    missing = [
-        k for k, v in cols.items()
-        if v is None and k not in ("RelativeAltitude", "LRFTargetDistance")
-    ]
+    required = (
+        "GPSLatitude",
+        "GPSLongitude",
+        "AbsoluteAltitude",
+        "FlightYawDegree",
+        "FlightPitchDegree",
+        "GimbalYawDegree",
+        "GimbalPitchDegree",
+    )
+    missing = [k for k in required if cols.get(k) is None]
     if missing:
         raise ValueError(
             f"Missing required columns: {missing}\nHave: {list(df.columns)}"
@@ -437,6 +444,7 @@ def pose_for_image(df: pd.DataFrame, cols: Dict[str, str], image_path: Path) -> 
         lat=float(g("GPSLatitude")),
         lon=float(g("GPSLongitude")),
         h_abs=float(g("AbsoluteAltitude")),
+        h_rel=float(g("RelativeAltitude")) if not pd.isna(g("RelativeAltitude")) else None,
         yaw_f=float(g("FlightYawDegree", 0.0)),
         pitch_f=float(g("FlightPitchDegree", 0.0)),
         roll_f=float(g("FlightRollDegree", 0.0)),
@@ -508,7 +516,7 @@ def rotation_from_ypr(yaw_deg: float, pitch_deg: float, roll_deg: float) -> np.n
     else:
         r /= np.linalg.norm(r)
 
-    d = np.cross(r, f)  # down
+    d = np.cross(f, r)  # down
     d /= max(1e-12, np.linalg.norm(d))
 
     # Apply roll if present
@@ -727,10 +735,18 @@ def ortho_one(
             )
         else:
             center_xy = (Cx, Cy)
-            slant = max(
-                30.0,
-                abs(Cz) / max(1e-3, math.cos(math.radians(max(1.0, abs(pitch)))))
+            # Without LRF, approximate slant range from altitude and pitch.
+            #
+            # Pitch convention (see rotation_from_ypr): pitch=0 is horizontal, -90 is nadir.
+            # Slant ≈ altitude / |sin(pitch)| (clamped) to avoid AOI explosions at near-horizontal pitch.
+            alt_guess = (
+                float(pose.h_rel)
+                if (pose.h_rel is not None and not math.isnan(float(pose.h_rel)))
+                else 50.0
             )
+            sin_pitch = abs(math.sin(math.radians(float(pitch))))
+            slant = alt_guess / max(1e-3, sin_pitch)
+            slant = float(min(max(slant, 30.0), 300.0))
 
         x0, y0, x1, y1 = compute_aoi(center_xy, dfov_deg, Ws / Hs, slant, margin)
 
