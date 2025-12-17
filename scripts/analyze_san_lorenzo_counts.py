@@ -116,12 +116,21 @@ def wgs84_to_utm_series(lat: float, lon: float, zone: Optional[int] = None, sout
     return easting, northing
 
 
-def wgs84_to_utm(lat: float, lon: float) -> Tuple[float, float]:
-    """Convert WGS84 lat/lon to UTM Zone 20S (EPSG:32720)."""
+def _wgs84_to_utm20s_meters(lat: float, lon: float) -> Tuple[float, float]:
+    """Convert WGS84 lat/lon to UTM Zone 20S meters (EPSG:32720).
+
+    Uses PROJ via pyproj when available, otherwise falls back to the local
+    series-expansion approximation in ``wgs84_to_utm_series``.
+    """
     if _WGS84_TO_UTM20S is not None:
         easting, northing = _WGS84_TO_UTM20S.transform(lon, lat)
         return float(easting), float(northing)
     return wgs84_to_utm_series(lat, lon, zone=UTM_ZONE, south=UTM_SOUTH)
+
+
+def wgs84_to_utm20s_meters(lat: float, lon: float) -> Tuple[float, float]:
+    """Honest alias for this script's intended projection target (EPSG:32720)."""
+    return _wgs84_to_utm20s_meters(lat, lon)
 
 
 def polygon_area_utm(points: List[Tuple[float, float]]) -> float:
@@ -130,7 +139,7 @@ def polygon_area_utm(points: List[Tuple[float, float]]) -> float:
         return 0.0
 
     # Convert to UTM meters
-    utm_points = [wgs84_to_utm(lat, lon) for lat, lon in points]
+    utm_points = [wgs84_to_utm20s_meters(lat, lon) for lat, lon in points]
 
     # Shoelace formula
     n = len(utm_points)
@@ -157,7 +166,7 @@ def convex_hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     # Project lat/lon to UTM so hull math is in meters.
     pts = []
     for lat, lon in points:
-        x, y = wgs84_to_utm(lat, lon)
+        x, y = wgs84_to_utm20s_meters(lat, lon)
         pts.append((x, y, lat, lon))
 
     # Sort by x then y (monotone chain requirement)
@@ -193,6 +202,8 @@ def load_waypoints(csv_path: Path) -> dict:
         reader = csv.DictReader(f)
         for row in reader:
             zone = row.get('zone', '').strip()
+            if not zone:
+                continue
             if row['lat'] and row['lon']:
                 lat = float(row['lat'])
                 lon = float(row['lon'])
