@@ -4,7 +4,7 @@
 Introduce an **optional** Area of Interest (AOI) filter for the LiDAR Height-Above-Ground (HAG) detection pipeline so that operators can exclude non-habitat terrain supplied by the client without altering the proven default workflow.
 
 ## Scope & Principles
-- **Default behaviour remains unchanged**: running the LiDAR pipeline with no AOI input must continue to produce the baseline 879 ± 5 detections on the golden tile.
+- **Default behaviour remains unchanged**: running the LiDAR pipeline with no AOI input must continue to produce the baseline 802 ± 5 detections on the golden tile.
 - **Optional input**: AOI filtering is only activated when a vetted polygon/raster is provided (e.g., `--aoi habitat_polygon.geojson`).
 - **Reproducibility**: AOI files are treated as first-class inputs—hashed, recorded in manifests, and referenced in RUNBOOK commands.
 - **Auditability**: Both filtered and unfiltered counts are logged so stakeholders can see the effect of the mask.
@@ -19,16 +19,8 @@ Introduce an **optional** Area of Interest (AOI) filter for the LiDAR Height-Abo
 1. **Baseline run (no AOI)**
    ```bash
    make test-lidar
-   # or
-   python scripts/run_lidar_hag.py \
-     --data-root data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample \
-     --out data/interim/lidar_golden.json \
-     --cell-res 0.25 \
-     --hag-min 0.2 --hag-max 0.6 \
-     --min-area-cells 2 --max-area-cells 80 \
-     --emit-geojson --plots
    ```
-   - Confirms 879 detections and captures unfiltered outputs for provenance.
+   - Confirms 802 detections and captures unfiltered outputs for provenance.
 
 2. **AOI-enabled run**
    ```bash
@@ -48,7 +40,7 @@ Introduce an **optional** Area of Interest (AOI) filter for the LiDAR Height-Abo
    - Write a provenance entry noting the AOI hash and filtering effect (`pipelines/utils/provenance.py` helper).
 
 4. **Regression testing**
-   - Extend `tests/test_golden_aoi.py` with a case that runs the script with an AOI covering the golden tile and asserts the count still lands at 879 ± 5.
+   - Extend `tests/test_golden_aoi.py` with a case that runs the script with an AOI covering the golden tile and asserts the count still lands at 802 ± 5.
    - Ensure CI runs the AoI-enabled test to guard against future regressions.
 
 ## Operator Steps
@@ -80,4 +72,3 @@ Introduce an **optional** Area of Interest (AOI) filter for the LiDAR Height-Abo
 2. Update RUNBOOK with AOI-enabled command examples and expected outputs.
 3. Extend `tests/test_golden_aoi.py` to cover the AOI path.
 4. Coordinate with the client to obtain their official habitat polygon and checksum it into the manifest.
-

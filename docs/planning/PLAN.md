@@ -2,7 +2,7 @@
 
 ## ✅ Critical Decision: Track A Confirmed!
 
-**LiDAR detector validated:** 879 candidates detected in 12 seconds on cloud3.las
+**LiDAR detector validated:** 802 candidates detected in 12 seconds on cloud3.las
 **Proceed with full pipeline** (LiDAR + Thermal + Fusion)
 
 ---
@@ -26,7 +26,7 @@ DORA principles documented for future implementation:
 ### ✅ Foundation Established
 - Legacy data mounted (read-only) at `data/legacy_ro/`
 - Working LiDAR detector found and copied to `scripts/run_lidar_hag.py`
-- Tested: 879 detections on cloud3.las
+- Tested: 802 detections on cloud3.las
 - Documentation: PRD, CLAUDE.md, PLAN, AI_POLICY, DORA principles
 
 ### ✅ Critical Discovery
@@ -54,7 +54,7 @@ source .venv/bin/activate
 # Verify it works
 make test-lidar
 
-# Expected: 879 detections
+# Expected: 802 detections
 ```
 
 **Status:** ⏳ NEXT UP
@@ -67,7 +67,7 @@ make test-lidar
 # File: tests/test_golden_aoi.py
 
 # Test asserts:
-# - Output JSON exists and has 879 candidates
+# - Output JSON exists and has 802 candidates
 # - GeoJSON files created
 # - Plots generated
 # - Reproducible across runs
@@ -163,7 +163,7 @@ ls data/legacy_ro/penguin-2.0/scripts/ | grep thermal
 
 ## Summary
 
-**What works:** LiDAR detection (879 candidates on test data)
+**What works:** LiDAR detection (802 candidates on test data)
 **What's next:** Environment validation → Tests → Thermal extraction
 **Decision point:** Thursday EOD (Track A vs Track B)
 **Hard deadline:** Friday EOD (something working for zoo weekend)

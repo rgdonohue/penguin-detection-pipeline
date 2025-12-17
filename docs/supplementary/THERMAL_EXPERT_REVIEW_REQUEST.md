@@ -391,7 +391,7 @@ Offset 0x1F0+:      Increasing sequence 0x42FE, 0x43FE, ..., 0x60FE
 **Decision**: Proceed with LiDAR-only detection
 
 **Rationale**:
-- LiDAR HAG (Height Above Ground) detection proven effective (879 candidates on test data)
+- LiDAR HAG (Height Above Ground) detection proven effective (802 candidates on test data)
 - Thermal adds no information in Antarctic conditions
 - False positive rate (15-35×) makes fusion impractical
 

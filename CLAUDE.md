@@ -55,7 +55,7 @@ penguins-4.0/
 ├── pipelines/             # Core pipeline implementations (library-style)
 │   ├── lidar.py           # LidarParams dataclass + subprocess wrapper
 │   ├── thermal.py         # Camera model, pose extraction, orthorectification
-│   ├── fusion.py          # STUB - NotImplementedError placeholder
+│   ├── fusion.py          # Spatial join (requires CRS x/y inputs)
 │   └── utils/provenance.py  # Provenance tracking utilities
 ├── data/
 │   ├── legacy_ro/         # Read-only mount to 4 legacy projects (NEVER MODIFY)
@@ -112,8 +112,8 @@ make thermal
 ```bash
 # These targets exist but scripts are incomplete:
 # make harvest   # No scripts/harvest_legacy.py
-# make fusion    # pipelines/fusion.py raises NotImplementedError
-# make golden    # Depends on fusion
+# make fusion    # Needs a CLI wrapper for pipelines/fusion.py
+# make golden    # Golden harness not yet ported to pipelines/golden.py
 ```
 
 ## Key Technical Parameters

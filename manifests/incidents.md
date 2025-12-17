@@ -25,7 +25,7 @@ Track failures, rollbacks, and lessons learned. Part of DORA Change Failure Rate
 
 ### [2025-10-08] Initial Setup - No Incidents
 
-Pipeline established with golden AOI test. LiDAR detector validated on cloud3.las (879 detections).
+Pipeline established with golden AOI test. LiDAR detector validated on cloud3.las (879 detections; rebased to 802 on 2025-12-17 after fixing an online-quantile bug).
 
 **Lead Time:** ~4 hours from PRD creation to working LiDAR test
 **Change Failure Rate:** 0% (1/1 tests passed)

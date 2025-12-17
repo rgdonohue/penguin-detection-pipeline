@@ -172,7 +172,7 @@ Script: `scripts/create_hotspot_overlay.py`
 **Approach**: Use LiDAR-only detection
 
 **Rationale**:
-- LiDAR HAG detection works well (879 candidates on test data)
+- LiDAR HAG detection works well (802 candidates on test data)
 - Thermal adds no value in Antarctic conditions
 - Fastest path to deployment
 - Infrastructure preserved for future warmer-climate datasets
@@ -217,7 +217,7 @@ Script: `scripts/create_hotspot_overlay.py`
 **Rationale**:
 1. Thermal signal is **physically weak** (0.047σ), not a software bug
 2. Our extraction code is **correct and validated**
-3. LiDAR detection **works well** (proven with 879 candidates)
+3. LiDAR detection **works well** (proven with 802 candidates)
 4. Thermal would add **noise, not signal**
 5. Project timeline requires **working solution** for zoo deployment
 

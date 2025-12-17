@@ -71,11 +71,11 @@ Last updated: 2025-12-17 UTC
 ## ❌ What Doesn't Work
 
 ### 1. Fusion Pipeline
-**Status:** STUB ONLY
+**Status:** PARTIALLY COMPLETE
 
-- `pipelines/fusion.py:29` raises `NotImplementedError`
-- `pipelines/golden.py:30` raises `NotImplementedError`
-- No spatial join, buffer matching, or label classification implemented
+- ✅ `pipelines/fusion.py` implements a nearest-neighbor spatial join (KD-tree) between LiDAR and thermal detections.
+- ⚠️ Fusion currently assumes both inputs already contain `x`/`y` in the same projected CRS (meters). It does **not** georeference thermal pixel detections.
+- ❌ `pipelines/golden.py` is still a stub (use `make golden` / `tests/test_golden_aoi.py` for guardrails).
 
 ### 2. Ground Truth Annotation
 **Status:** 44% COMPLETE (legacy), NOT STARTED (Argentina)
@@ -108,7 +108,7 @@ Last updated: 2025-12-17 UTC
 | Thermal Extraction | Working | Medium | Calibration offset |
 | Thermal Detection | Research | Low | F1 < 0.1 on most frames |
 | Thermal Tests | Passing | Medium | Data/GDAL availability |
-| Fusion | Stub | N/A | Not implemented |
+| Fusion | Partial | Medium | Thermal detections need CRS `x/y` |
 | Ground Truth (legacy) | 44% | Medium | Manual annotation needed |
 | Ground Truth (Argentina) | 0% | — | Georeferencing needed |
 
@@ -118,14 +118,14 @@ Last updated: 2025-12-17 UTC
 
 ### Immediate Blockers (fix before any other work)
 
-1. **Implement fusion pipeline** — `pipelines/fusion.py` is a stub
+1. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
 2. **Resolve thermal calibration** — address the documented offsets before operational use
 3. **Complete ground truth** — finish legacy frames and implement Argentina GPS→pixel projection
 
 ### Short-term (1-2 weeks)
 
 4. Complete legacy ground truth (4 frames, 77 penguins)
-5. Implement fusion pipeline (~6-8 hours)
+5. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
 6. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
 
 ### Medium-term (1 month)

@@ -48,7 +48,7 @@
 
 We've developed a penguin detection pipeline with two components:
 
-1. **LiDAR detection** (primary): Processes field data, produces several hundred candidate detections per tile (879 on test tile with tuned parameters)
+1. **LiDAR detection** (primary): Processes field data, produces several hundred candidate detections per tile (802 on test tile with tuned parameters)
 2. **Thermal characterization**: Demonstrated strong contrast in several frames (ΔT ≈ 8–11 °C) but poor automated detection (best F1 ≈ 0.30); thermal now serves as a validation/context layer
 
 LiDAR detection counts match observed colony density and processing runs are reproducible.
@@ -139,7 +139,7 @@ All test data comes from **one coastal Patagonian colony site (Puerto Madryn) in
 **Generalization uncertainty**: These parameters were tuned on one test site. No validation on different colonies, seasons, or locations.
 
 **Detection Count Uncertainty**:
-- Test tile: 879 detections (reproducible with fixed parameters)
+- Test tile: 802 detections (reproducible with fixed parameters)
 - **Unknown**: Actual false positive and false negative rates
 - **Not validated** against comprehensive ground truth counts
 - Detection counts are "candidate detections" - require interpretation

@@ -122,7 +122,7 @@ echo ""
 
 # Check golden test data
 echo "5. Checking golden AOI test data..."
-golden_file="data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample/cloud3.las"
+golden_file="data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las"
 if [ -f "$golden_file" ]; then
     size=$(du -h "$golden_file" | cut -f1)
     echo -e "${GREEN}✓ Golden test file exists: $golden_file ($size)${NC}"
@@ -135,9 +135,16 @@ echo ""
 # Run smoke test
 echo "6. Running LiDAR smoke test..."
 echo "  (This will take ~10-15 seconds)"
+tmp_root=$(mktemp -d 2>/dev/null || mktemp -d -t penguins_validation)
+trap 'rm -rf "$tmp_root"' EXIT
+
+lidar_tmp="$tmp_root/lidar"
+mkdir -p "$lidar_tmp"
+ln -s "$(pwd)/$golden_file" "$lidar_tmp/cloud3.las"
+
 python3 scripts/run_lidar_hag.py \
-    --data-root data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample \
-    --out data/interim/validation_test.json \
+    --data-root "$lidar_tmp" \
+    --out "$tmp_root/validation_test.json" \
     --cell-res 0.25 \
     --hag-min 0.2 --hag-max 0.6 \
     --min-area-cells 2 --max-area-cells 80 \
@@ -145,11 +152,11 @@ python3 scripts/run_lidar_hag.py \
 
 if [ $? -eq 0 ]; then
     # Extract count using Python (no external dependencies)
-    count=$(python3 -c "import json; print(json.load(open('data/interim/validation_test.json'))['total_count'])")
+    count=$(python3 -c "import json; print(json.load(open('$tmp_root/validation_test.json'))['total_count'])")
     echo -e "${GREEN}✓ LiDAR script ran successfully${NC}"
-    echo "  Detected: $count candidates (expected: 879 ± 5)"
+    echo "  Detected: $count candidates (expected: 802 ± 5)"
 
-    if [ "$count" -ge 874 ] && [ "$count" -le 884 ]; then
+    if [ "$count" -ge 797 ] && [ "$count" -le 807 ]; then
         echo -e "${GREEN}✓ Detection count within tolerance${NC}"
     else
         echo -e "${YELLOW}⚠ Detection count outside expected range${NC}"
@@ -163,7 +170,7 @@ echo ""
 
 # Run pytest
 echo "7. Running golden AOI test suite..."
-pytest tests/test_golden_aoi.py -v --tb=short > /tmp/pytest.log 2>&1
+python3 -m pytest tests/test_golden_aoi.py -v --tb=short > /tmp/pytest.log 2>&1
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ All tests passed${NC}"

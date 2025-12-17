@@ -121,19 +121,20 @@
 - [ ] Validate total count within 20% of 1,533
 
 ### 8. Fusion Pipeline Implementation
-**Status:** ❌ STUB ONLY
+**Status:** ✅ BASIC JOIN IMPLEMENTED (partial)
 
 **Current state:**
-- `pipelines/fusion.py:29` raises `NotImplementedError`
-- `pipelines/golden.py:30` raises `NotImplementedError`
+- ✅ `pipelines/fusion.py` implements a nearest-neighbor spatial join (KD-tree) with `match_radius_m` thresholding and labels (`both` / `lidar_only` / `thermal_only`).
+- ⚠️ Inputs must already include `x`/`y` in the same projected CRS; thermal pixel detections are not georeferenced here.
+- ❌ `pipelines/golden.py` remains a stub (golden guardrails live in `tests/test_golden_aoi.py` / `make test-lidar`).
 
 **Required implementation:**
-- [ ] Spatial join (LiDAR candidates + thermal detections)
-- [ ] Buffer matching (0.5m radius)
-- [ ] Label classification (Both / LiDAR-only / Thermal-only)
+- [x] Spatial join (LiDAR candidates + thermal detections)
+- [x] Buffer matching (via `match_radius_m`)
+- [x] Label classification (Both / LiDAR-only / Thermal-only)
 - [ ] LiDAR-gated thermal scoring
 - [ ] `scripts/run_fusion_join.py` CLI
-- [ ] `tests/test_fusion.py` coverage
+- [x] `tests/test_fusion_join.py` coverage
 
 **Estimated time:** 6-8 hours
 

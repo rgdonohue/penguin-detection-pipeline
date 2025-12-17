@@ -15,7 +15,7 @@
 - 🇦🇷 **Timeline:** Prepare for Argentina data collection trip
 
 ### Current Status
-- ✅ **LiDAR Pipeline:** Working (879 detections on cloud3.las sample)
+- ✅ **LiDAR Pipeline:** Working (802 detections on cloud3.las sample)
 - ✅ **Thermal Investigation:** Complete - mixed contrast findings (typical 8-11°C, worst-case 0.14°C)
 - ✅ **Ground Truth:** 3/7 frames manually verified (frames 0353, 0355, 0356 = 60 penguins)
 - ⚠️ **Thermal Detection:** Variable performance - frame-dependent (F1: 0.02-0.30)
@@ -155,7 +155,7 @@ The client's estimated total penguin count of **1533** (not 1022 as previously s
 **Dependencies:** Phase 3 complete (to understand LiDAR vs Thermal discrepancy)
 
 ### Current Performance
-- **Sample run:** 879 detections on cloud3.las (4.4 GB tile)
+- **Sample run:** 802 detections on cloud3.las (4.4 GB tile)
 - **Full dataset:** 5 tiles (cloud0-4.las, ~35 GB total)
 - **Parameters:** cell_res=0.25m, HAG 0.2-0.6m, area 2-80 cells
 

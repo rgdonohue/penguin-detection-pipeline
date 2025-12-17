@@ -173,7 +173,7 @@ class TestLiDARPipeline:
         assert json_path.stat().st_size > 0, "Output JSON is empty"
 
     def test_detection_count(self):
-        """Verify expected number of detections (879 ± tolerance)."""
+        """Verify expected number of detections (802 ± tolerance)."""
         json_path = TEST_OUTPUT_DIR / "golden_results.json"
 
         with open(json_path) as f:
