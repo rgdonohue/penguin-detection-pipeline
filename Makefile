@@ -87,6 +87,6 @@ clean:
 # TODO: Add these targets once scripts exist
 # - make harvest (needs scripts/harvest_legacy.py)
 # - make thermal-ortho (full orthorectification once GDAL workflow is ready)
-# - make fusion (needs scripts/run_fusion_join.py)
+# - make fusion (CLI exists; needs real input summaries with CRS x/y)
 # - make golden (needs all of the above)
 # - make rollback (needs snapshot mechanism)

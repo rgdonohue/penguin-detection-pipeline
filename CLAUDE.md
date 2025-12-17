@@ -23,7 +23,7 @@ This is the Penguin Detection Pipeline project (v4.0) - a production-oriented sy
 | **LiDAR Detection** | ✅ Production-ready | 802 detections on golden AOI (guardrail); `scripts/run_lidar_hag.py` proven |
 | **Thermal Extraction** | ⚠️ Research phase | 16-bit radiometric extraction working; ~9°C calibration offset unresolved |
 | **Thermal Detection** | ⚠️ Research phase | F1 scores 0.02-0.30 depending on frame contrast; 60/137 ground truth validated |
-| **Fusion** | ❌ Not implemented | `pipelines/fusion.py` is a stub; spatial join logic pending |
+| **Fusion** | ✅ Partial | `pipelines/fusion.py` does CRS-aware nearest-neighbor join; thermal pixel→CRS still missing |
 | **Ground Truth** | 🔄 In progress | Argentina field counts (~3,705 penguins); GPS→pixel projection needed |
 
 ### Active Development Priorities

@@ -238,7 +238,7 @@ penguins-4.0/
 ├── pipelines/
 │   ├── lidar.py               # LiDAR processing library
 │   ├── thermal.py             # Thermal processing library
-│   ├── fusion.py              # Fusion (stub - not implemented)
+│   ├── fusion.py              # Fusion spatial join (requires CRS x/y inputs)
 │   └── utils/                 # Shared utilities
 │
 ├── tests/

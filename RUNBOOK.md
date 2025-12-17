@@ -402,7 +402,6 @@ These commands are planned but don't work yet:
 ```bash
 # ❌ NOT WORKING - scripts don't exist
 # make harvest      - Automated legacy data import with checksums
-# make fusion       - LiDAR + thermal fusion analysis
 # make golden       - Full end-to-end pipeline on golden AOI
 # make rollback     - Restore from .rollback/ snapshot
 ```
@@ -530,13 +529,12 @@ rm -rf data/interim/*
 ### When Fusion Script Exists
 
 ```bash
-# Not yet implemented
-# python scripts/run_fusion_join.py \
-#   --candidates data/processed/lidar/candidates.gpkg \
-#   --thermal-vrt data/processed/thermal/thermal.vrt \
-#   --px-window 2 \
-#   --out data/processed/fusion/fusion.csv \
-#   --qc-panel qc/panels/fusion_aoi.png
+# Tested via unit tests (synthetic inputs); requires CRS `x/y` in both summaries.
+python scripts/run_fusion_join.py \
+  --lidar-summary path/to/lidar_summary.json \
+  --thermal-summary path/to/thermal_summary.json \
+  --out data/interim/fusion_rollup.json \
+  --match-radius-m 0.5
 ```
 
 ---
