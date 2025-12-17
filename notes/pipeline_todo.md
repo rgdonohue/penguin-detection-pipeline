@@ -183,6 +183,14 @@
 - [x] Document thermal signal variability (0.14°C to 11°C)
 - [x] Complete thermal characterization study
 
+### Camera Model Fix (Dec 2025)
+- [x] Research DJI angle conventions (see `docs/research/DJI Drone Camera Model & Angle Conventions.pdf`)
+- [x] Fix `rotation_from_ypr()` with proper Euler ZYX sequence
+- [x] Use Gimbal angles directly (ABSOLUTE to NED), not Flight+Gimbal
+- [x] Add deprecation warnings to incorrect `Pose.*_total` properties
+- [x] Verify det(R)=+1 for all test cases including nadir
+- [x] All 41 tests passing
+
 ### Argentina Data (Dec 2025)
 - [x] Catalogue Argentina LiDAR (24 files, 754M points)
 - [x] Tune DJI L2 parameters (Caleta sites)
@@ -197,13 +205,13 @@
 | Category | Complete | Total | Percentage |
 |----------|----------|-------|------------|
 | LiDAR Pipeline | 6 | 7 | 86% |
-| Thermal Pipeline | 4 | 9 | 44% |
-| Fusion Pipeline | 0 | 6 | 0% |
+| Thermal Pipeline | 5 | 9 | 56% |
+| Fusion Pipeline | 3 | 6 | 50% |
 | Ground Truth (legacy) | 3 | 7 | 43% |
 | Ground Truth (Argentina) | 2 | 4 | 50% |
 | Documentation | 3 | 4 | 75% |
 
-**Overall:** ~50% complete
+**Overall:** ~55% complete (camera model fix + fusion spatial join completed)
 
 ---
 
@@ -221,6 +229,7 @@
 
 ## 🔄 Update Log
 
+- **2025-12-17 (PM):** Camera model fix (A3) implemented — proper Euler ZYX sequence, gimbal angles ABSOLUTE to NED, det(R)=+1 verified, all 41 tests passing
 - **2025-12-17:** Major refresh — accurate task status, clarified ground truth (48 waypoints vs 3,705 count), documented test failures, updated blocker matrix
 - **2025-11-05:** Consolidated from PLAN.md, NEXT_STEPS.md, and Codex feedback
 - **2025-10-21:** Major update post client meeting

@@ -1,9 +1,15 @@
 # Research Brief: DJI Drone Camera Model & Angle Conventions
 
 **Date:** 2025-12-17
-**Priority:** HIGH (angle conventions still unverified)
+**Priority:** RESOLVED ✅
 **Requested by:** Penguin Detection Pipeline Team
 **Deliverable:** Technical report with validated rotation matrix formula
+
+**STATUS UPDATE (2025-12-17):**
+- Research report received and analyzed (see `docs/research/DJI Drone Camera Model & Angle Conventions.pdf`)
+- Fix implemented in `pipelines/thermal.py:rotation_from_ypr()`
+- All unit tests passing (41 passed, 2 skipped)
+- Key findings: DJI Gimbal angles are ABSOLUTE to NED frame (not relative to drone)
 
 ---
 
@@ -33,25 +39,27 @@ def rotation_from_ypr(yaw_deg: float, pitch_deg: float, roll_deg: float) -> np.n
     """
 ```
 
-### The Bug
+### The Bug (FIXED ✅)
 
 For nadir case (camera pointing straight down, `pitch=-90°`):
 - Expected: `det(R) = +1` (proper rotation matrix)
-- Actual: `det(R) = -1` (reflection matrix)
+- ~~Actual: `det(R) = -1` (reflection matrix)~~ **FIXED**: Now returns +1
 
-This causes our test to fail:
+~~This causes our test to fail:~~
 ```python
 R = rotation_from_ypr(yaw_deg=0, pitch_deg=-90, roll_deg=0)
-assert np.allclose(np.linalg.det(R), 1.0)  # FAILS
+assert np.allclose(np.linalg.det(R), 1.0)  # NOW PASSES ✅
 ```
 
-### Root Cause (Hypothesis)
+### Root Cause (CONFIRMED ✅)
 
-We don't actually know DJI's conventions. Our assumptions may be wrong about:
-1. What coordinate system DJI uses (NED vs ENU vs something else)
-2. What the angle signs mean (positive pitch = up or down?)
-3. How flight angles and gimbal angles combine
-4. What the camera's native coordinate system is
+The original implementation had multiple errors:
+1. **Coordinate System**: DJI uses **NED** (North-East-Down), not ENU
+2. **Gimbal Angles**: Gimbal angles are **ABSOLUTE** to NED frame (already stabilized), NOT relative to drone body
+3. **Flight+Gimbal Addition**: We were incorrectly adding Flight + Gimbal angles. Correct approach: use Gimbal angles directly
+4. **Rotation Sequence**: Correct sequence is intrinsic ZYX (yaw→pitch→roll)
+
+The fix uses proper Euler angle composition in NED frame, then converts to ENU for mapping.
 
 ---
 

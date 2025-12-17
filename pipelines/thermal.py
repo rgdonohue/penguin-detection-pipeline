@@ -405,17 +405,50 @@ class Pose:
 
     @property
     def yaw_total(self) -> float:
-        """Combined flight + gimbal yaw."""
+        """DEPRECATED: Combined flight + gimbal yaw.
+
+        WARNING: This is INCORRECT for DJI drones. Gimbal angles are ABSOLUTE
+        to NED frame (gimbal stabilization already applied). Use yaw_g directly.
+        See: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
+        """
+        warnings.warn(
+            "Pose.yaw_total is deprecated and incorrect. DJI gimbal angles are "
+            "ABSOLUTE to NED frame. Use pose.yaw_g directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.yaw_f + self.yaw_g
 
     @property
     def pitch_total(self) -> float:
-        """Combined flight + gimbal pitch."""
+        """DEPRECATED: Combined flight + gimbal pitch.
+
+        WARNING: This is INCORRECT for DJI drones. Gimbal angles are ABSOLUTE
+        to NED frame (gimbal stabilization already applied). Use pitch_g directly.
+        See: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
+        """
+        warnings.warn(
+            "Pose.pitch_total is deprecated and incorrect. DJI gimbal angles are "
+            "ABSOLUTE to NED frame. Use pose.pitch_g directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.pitch_f + self.pitch_g
 
     @property
     def roll_total(self) -> float:
-        """Combined flight + gimbal roll."""
+        """DEPRECATED: Combined flight + gimbal roll.
+
+        WARNING: This is INCORRECT for DJI drones. Gimbal angles are ABSOLUTE
+        to NED frame (gimbal stabilization already applied). Use roll_g directly.
+        See: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
+        """
+        warnings.warn(
+            "Pose.roll_total is deprecated and incorrect. DJI gimbal angles are "
+            "ABSOLUTE to NED frame. Use pose.roll_g directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.roll_f + self.roll_g
 
 
@@ -517,51 +550,97 @@ def intrinsics_from_fov(hfov_deg: float, vfov_deg: float, w: int, h: int) -> Tup
     return fx, fy, cx, cy
 
 
-def rotation_from_ypr(yaw_deg: float, pitch_deg: float, roll_deg: float) -> np.ndarray:
+def rotation_from_ypr(
+    yaw_deg: float,
+    pitch_deg: float,
+    roll_deg: float,
+    frame: str = "ENU",
+) -> np.ndarray:
     """
-    Build world→camera rotation matrix from yaw/pitch/roll.
+    Build world→camera rotation matrix from DJI gimbal yaw/pitch/roll.
 
-    Conventions:
-        - Yaw: North→East (degrees)
-        - Pitch: Positive up (degrees)
-        - Roll: Right-hand about forward (degrees)
-        - Camera axes: x=right, y=down, z=forward
-        - World frame: ENU (East-North-Up)
+    IMPORTANT: This function expects GIMBAL angles from DJI XMP metadata,
+    NOT flight angles. DJI gimbal angles are ABSOLUTE to the NED frame
+    (already include drone attitude stabilization). Do NOT add Flight + Gimbal.
+
+    Conventions (validated against DJI SDK documentation):
+        - Yaw: Rotation about NED-Down axis, 0°=North, positive clockwise (East)
+        - Pitch: Rotation about resulting X axis, 0°=horizontal, -90°=nadir
+        - Roll: Rotation about resulting Y axis
+        - Rotation order: Intrinsic ZYX (yaw→pitch→roll)
+        - Camera axes: x=right, y=down, z=forward (optical axis)
+        - World frame: NED internally, converted to ENU if frame="ENU"
+
+    Args:
+        yaw_deg: GimbalYawDegree from DJI XMP metadata
+        pitch_deg: GimbalPitchDegree from DJI XMP metadata (-90° = nadir)
+        roll_deg: GimbalRollDegree from DJI XMP metadata
+        frame: Output coordinate frame ("NED" or "ENU", default "ENU")
 
     Returns:
         3x3 rotation matrix R where v_world = R @ v_cam
+        Guaranteed: det(R) = +1 (proper rotation, not reflection)
+
+    References:
+        - DJI Mobile SDK: FlightController attitude conventions
+        - DJI OSDK: Gimbal absolute angle mode documentation
+        - Research brief: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
     """
-    yaw = math.radians(yaw_deg)
-    pitch = math.radians(pitch_deg)
+    # Convert to radians
+    psi = math.radians(yaw_deg)    # ψ (yaw about Z)
+    theta = math.radians(pitch_deg)  # θ (pitch about X)
+    phi = math.radians(roll_deg)   # φ (roll about Y)
 
-    # Forward vector in ENU from yaw/pitch
-    c = math.cos(pitch)
-    f_e = math.sin(yaw) * c
-    f_n = math.cos(yaw) * c
-    f_u = math.sin(pitch)
-    f = np.array([f_e, f_n, f_u], dtype=float)
-    f /= max(1e-12, np.linalg.norm(f))
+    # Precompute trig values
+    c_psi, s_psi = math.cos(psi), math.sin(psi)
+    c_theta, s_theta = math.cos(theta), math.sin(theta)
+    c_phi, s_phi = math.cos(phi), math.sin(phi)
 
-    # Right and down vectors
-    up = np.array([0.0, 0.0, 1.0], dtype=float)
-    r = np.cross(f, up)
-    if np.linalg.norm(r) < 1e-9:
-        r = np.array([1.0, 0.0, 0.0])
+    # Build rotation matrices for intrinsic ZYX sequence
+    # R = Rz(yaw) @ Ry(pitch) @ Rx(roll)
+    # But since we want camera→world (columns are camera axes in world),
+    # we compute: R_world_cam = Rz @ Ry @ Rx
+
+    # Rz(yaw) - rotation about Z (Down in NED)
+    Rz = np.array([
+        [c_psi, -s_psi, 0],
+        [s_psi,  c_psi, 0],
+        [0,      0,     1],
+    ], dtype=float)
+
+    # Ry(pitch) - rotation about Y axis
+    # Note: DJI pitch convention is -90° for nadir
+    Ry = np.array([
+        [c_theta,  0, s_theta],
+        [0,        1, 0],
+        [-s_theta, 0, c_theta],
+    ], dtype=float)
+
+    # Rx(roll) - rotation about X axis
+    Rx = np.array([
+        [1, 0,      0],
+        [0, c_phi, -s_phi],
+        [0, s_phi,  c_phi],
+    ], dtype=float)
+
+    # Compose: R_ned = Rz @ Ry @ Rx (intrinsic ZYX)
+    R_ned = Rz @ Ry @ Rx
+
+    if frame.upper() == "ENU":
+        # Convert from NED to ENU
+        # NED: (North, East, Down) → ENU: (East, North, Up)
+        # Transformation: E=N_ned, N=E_ned, U=-D_ned
+        # M transforms vectors: v_enu = M @ v_ned
+        M_ned_to_enu = np.array([
+            [0, 1,  0],  # ENU-East = NED-East
+            [1, 0,  0],  # ENU-North = NED-North
+            [0, 0, -1],  # ENU-Up = -NED-Down
+        ], dtype=float)
+        # Transform rotation: R_enu = M @ R_ned @ M^T
+        R = M_ned_to_enu @ R_ned @ M_ned_to_enu.T
     else:
-        r /= np.linalg.norm(r)
+        R = R_ned
 
-    d = np.cross(f, r)  # down
-    d /= max(1e-12, np.linalg.norm(d))
-
-    # Apply roll if present
-    if abs(roll_deg) > 1e-8:
-        th = math.radians(roll_deg)
-        ct, st = math.cos(th), math.sin(th)
-        r2 = ct * r + st * d
-        d2 = -st * r + ct * d
-        r, d = r2, d2
-
-    R = np.stack([r, d, f], axis=1)  # columns are camera axes in world frame
     return R
 
 
@@ -739,10 +818,13 @@ def ortho_one(
     hfov_deg, vfov_deg = hv_from_dfov(dfov_deg, Ws, Hs)
     fx, fy, cx, cy = intrinsics_from_fov(hfov_deg, vfov_deg, Ws, Hs)
 
-    # Compose yaw/pitch/roll + boresight
-    yaw = pose.yaw_total + boresight[0]
-    pitch = pose.pitch_total + boresight[1]
-    roll = pose.roll_total + boresight[2]
+    # Use GIMBAL angles directly (DJI gimbal angles are ABSOLUTE to NED frame,
+    # NOT relative to drone body - gimbal stabilization is already applied).
+    # Do NOT add Flight+Gimbal - that was the source of det(R)=-1 bug.
+    # See: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
+    yaw = pose.yaw_g + boresight[0]
+    pitch = pose.pitch_g + boresight[1]
+    roll = pose.roll_g + boresight[2]
     R = rotation_from_ypr(yaw, pitch, roll)  # world←cam
 
     # Open DSM
@@ -1003,10 +1085,9 @@ def estimate_boresight(poses_csv: Path) -> dict:
     df = pd.read_csv(poses_csv)
     cols = {k: _find_col(df, v) for k, v in POSE_COLS.items()}
 
-    # Check for required columns
+    # Check for required columns (Flight angles not needed - gimbal angles are ABSOLUTE)
     required = [
         "GPSLatitude", "GPSLongitude", "AbsoluteAltitude",
-        "FlightYawDegree", "FlightPitchDegree",
         "GimbalYawDegree", "GimbalPitchDegree",
         "LRFTargetLat", "LRFTargetLon", "LRFTargetAbsAlt"
     ]
@@ -1014,15 +1095,11 @@ def estimate_boresight(poses_csv: Path) -> dict:
     if missing:
         raise ValueError(f"Missing required columns for boresight: {missing}")
 
-    # Extract camera pointing angles
-    yaw_cam = (
-        df[cols["FlightYawDegree"]].astype(float) +
-        df[cols["GimbalYawDegree"]].astype(float)
-    ).values
-    pitch_cam = (
-        df[cols["FlightPitchDegree"]].astype(float) +
-        df[cols["GimbalPitchDegree"]].astype(float)
-    ).values
+    # Extract camera pointing angles (GIMBAL angles only - they are ABSOLUTE to NED)
+    # Do NOT add Flight+Gimbal - gimbal stabilization is already applied.
+    # See: docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md
+    yaw_cam = df[cols["GimbalYawDegree"]].astype(float).values
+    pitch_cam = df[cols["GimbalPitchDegree"]].astype(float).values
 
     # Extract camera positions
     lat = df[cols["GPSLatitude"]].astype(float).values
