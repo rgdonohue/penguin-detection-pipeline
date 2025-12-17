@@ -116,6 +116,15 @@ Last updated: 2025-12-17 UTC
 
 ## 🎯 Critical Path
 
+## ✅ Readiness Framing (QC vs Scientific)
+
+This repo tracks two kinds of progress:
+
+- **QC / Engineering readiness:** deterministic, CRS-aware artifacts that let us validate geometry and pipeline contracts.
+- **Scientific / Field-valid readiness:** calibration + validation that makes thermal-derived counts trustworthy.
+
+Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
+
 ### Immediate Blockers (fix before any other work)
 
 1. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR

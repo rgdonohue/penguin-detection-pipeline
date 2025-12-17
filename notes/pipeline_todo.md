@@ -17,6 +17,17 @@
 
 ---
 
+## 🧭 Workstreams (QC vs Scientific Validity)
+
+We track progress in two parallel lanes:
+
+1. **QC / Engineering milestones**: make the pipeline deterministic, CRS-aware, runnable, and contract-stable (no claims about temperature accuracy).
+2. **Scientific / Field-valid milestones**: calibration + validation that make outputs numerically trustworthy for counting.
+
+**Policy:** `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
+
+---
+
 ## 🚨 Critical Blockers (Fix First)
 
 ### 1. Test Suite Guardrails
@@ -79,6 +90,55 @@
 ---
 
 ## 📋 Pending Implementation
+
+## ✅ QC / Engineering Milestones (do now; testable without new imagery)
+
+### E1. Explicit Schemas + CRS Contracts
+**Status:** ⏳ IN PROGRESS
+
+- [ ] Define versioned summary JSON schema for LiDAR / thermal / fusion
+- [ ] Ensure every CRS-space detection output includes `crs` (e.g. `EPSG:32720`)
+- [ ] Enforce CRS mismatch rejection (fusion already rejects mismatches)
+- [ ] Add a lightweight contract/integration test that validates schema keys and determinism
+
+### E2. Thermal Pixel→CRS Scaffolding (for orthorectified outputs)
+**Status:** ❌ NOT STARTED
+
+- [ ] Implement a pixel→CRS conversion helper using raster geotransforms (no GDAL required)
+- [ ] Add unit tests with synthetic transforms
+- [ ] Define the expected “thermal CRS detections summary” format consumed by fusion
+
+### E3. Fusion-as-QC (Geometry/Alignment)
+**Status:** ✅ PARTIAL
+
+- [x] `pipelines/fusion.py` KD-tree join + CRS mismatch rejection
+- [x] `scripts/run_fusion_join.py` CLI wrapper
+- [ ] Add explicit output labeling (`purpose=qc_alignment`, `temperature_calibrated=false`)
+
+### E4. Golden Harness Decision (resolve ambiguity)
+**Status:** ❌ NOT STARTED
+
+- [ ] Option A: Implement `pipelines/golden.py` as a wrapper around existing guardrails (`tests/test_golden_aoi.py`)
+- [ ] Option B: Formally deprecate/remove `pipelines/golden.py` and document the chosen workflow
+
+---
+
+## 🔬 Scientific / Field-Valid Milestones (blocked on calibration + new client imagery)
+
+### S1. Thermal Calibration
+**Status:** ❌ NOT STARTED
+
+This is required before treating thermal-derived counts as trustworthy.
+
+### S2. Camera Model Accuracy Harness (RMSE on control points)
+**Status:** ❌ NOT STARTED
+
+Add a validation harness that measures geometric accuracy of orthorectification against known control points (LRF targets / surveyed points).
+
+### S3. Argentina Ground Truth Georeferencing Scope
+**Status:** ❌ NOT STARTED
+
+Argentina data currently provides **region totals** (~3,705 counts), not per-penguin pixel labels. Decide whether validation is region-based (polygons/density) or point-based (if new imagery enables per-object labeling).
 
 ### 5. Thermal Calibration Investigation
 **Status:** ❌ NOT STARTED
