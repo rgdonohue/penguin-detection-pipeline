@@ -22,9 +22,12 @@ This is the Penguin Detection Pipeline project (v4.0) - a production-oriented sy
 |-------|--------|-------|
 | **LiDAR Detection** | ✅ Production-ready | 802 detections on golden AOI (guardrail); `scripts/run_lidar_hag.py` proven |
 | **Thermal Extraction** | ⚠️ Research phase | 16-bit radiometric extraction working; ~9°C calibration offset unresolved |
+| **Thermal Camera Model** | ✅ Fixed | `rotation_from_ypr()` uses proper Euler ZYX in NED→ENU; det(R)=+1 verified |
 | **Thermal Detection** | ⚠️ Research phase | F1 scores 0.02-0.30 depending on frame contrast; 60/137 ground truth validated |
-| **Fusion** | ✅ Partial | `pipelines/fusion.py` does CRS-aware nearest-neighbor join; thermal pixel→CRS still missing |
+| **Fusion** | ⚠️ QC/Geometry only | `pipelines/fusion.py` + CLI; CRS-aware join works; thermal pixel→CRS still missing |
 | **Ground Truth** | 🔄 In progress | Argentina field counts (~3,705 penguins); GPS→pixel projection needed |
+
+**Important:** We separate **QC/Engineering milestones** (pipeline runs, CRS contracts, determinism) from **Scientific/Field-valid milestones** (calibrated temperatures, validated counts). See `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`.
 
 ### Active Development Priorities
 1. **Argentina Data Integration** - Boundary/route waypoints (48) in `data/processed/san_lorenzo_waypoints.csv`; penguin counts (~3,705) in `san_lorenzo_analysis.json`; GPS→pixel projection pending
@@ -99,21 +102,27 @@ python3 -c "import laspy, scipy, skimage, pytest; print('✓ Core dependencies O
 ```bash
 # LiDAR detection on golden AOI (PROVEN - 802 detections)
 make test-lidar
-# Or: pytest tests/test_golden_aoi.py -v
+# QC golden guardrail (fast)
+make golden
 
-# Run golden AOI tests (12 tests)
-pytest tests/test_golden_aoi.py -v
+# Run full test suite (some thermal/DSM tests may skip if fixtures absent)
+.venv/bin/python -m pytest -q
 
 # Thermal smoke test (requires GDAL)
 make thermal
+
+# Fusion spatial join (requires CRS-aligned inputs)
+python scripts/run_fusion_join.py \
+  --lidar-summary data/interim/lidar.json \
+  --thermal-summary data/interim/thermal.json \
+  --out data/interim/fused.json
 ```
 
 ### Commands Not Yet Working
 ```bash
 # These targets exist but scripts are incomplete:
 # make harvest   # No scripts/harvest_legacy.py
-# make fusion    # Needs a CLI wrapper for pipelines/fusion.py
-# make golden    # Golden harness not yet ported to pipelines/golden.py
+# make golden-full   # Full end-to-end golden run (thermal→fusion) not implemented
 ```
 
 ## Key Technical Parameters
@@ -139,6 +148,16 @@ make thermal
 
 **CRITICAL:** Full radiometric data IS encoded in thermal images, even when it appears lost. Use `pipelines/thermal.py:extract_thermal_data()` to properly decode 16-bit thermal values.
 
+### Camera Model Conventions (DJI Gimbal)
+| Convention | Value | Notes |
+|------------|-------|-------|
+| Reference frame | NED (North-East-Down) | DJI native; converted to ENU for mapping |
+| Gimbal angles | ABSOLUTE to NED | Already stabilized; do NOT add Flight+Gimbal |
+| Rotation order | Intrinsic ZYX | Yaw→Pitch→Roll (Euler sequence) |
+| Nadir pitch | -90° | GimbalPitchDegree = -90 means camera pointing straight down |
+
+**CRITICAL:** Use `pose.yaw_g`, `pose.pitch_g`, `pose.roll_g` directly. The `Pose.*_total` properties are deprecated and emit warnings. See `docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md`.
+
 ### Coordinate Reference System
 - **EPSG:32720** - UTM Zone 20S (Argentina)
 - All outputs should maintain this CRS for consistency
@@ -148,9 +167,11 @@ make thermal
 | Gate | Criteria | Status |
 |------|----------|--------|
 | LiDAR | Reproducible 802 ± tolerance on cloud3.las | ✅ Passing |
-| Thermal Ortho | RMSE ≤ 2 px on control points | ⚠️ Needs validation |
-| Thermal Detection | Total count within 20% of 1533 | ❌ Not yet achieved |
-| Fusion | Complete rows with Both/LiDAROnly/ThermalOnly labels | ❌ Not implemented |
+| Camera Model | det(R)=+1 for all orientations including nadir | ✅ Passing |
+| Thermal Ortho | RMSE ≤ 2 px on control points | ⚠️ Needs validation (blocked on control points) |
+| Thermal Detection | Total count within 20% of 1533 | ❌ Not yet achieved (blocked on calibration) |
+| Fusion (QC) | CRS-aware spatial join, mismatch rejection | ✅ Passing (geometry only) |
+| Fusion (Science) | Complete rows with calibrated Both/LiDAROnly/ThermalOnly | ❌ Blocked on thermal calibration |
 
 ## Argentina Field Data (2025)
 
@@ -208,7 +229,9 @@ conda install -c conda-forge gdal rasterio pyproj geopandas
 | `PRD.md` | Product requirements and success criteria |
 | `RUNBOOK.md` | Authoritative tested commands |
 | `docs/reports/STATUS.md` | Current implementation state |
+| `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md` | QC vs Scientific milestone separation policy |
 | `docs/planning/VISUALIZATION_STRATEGY.md` | Visualization requirements and approach |
+| `docs/research/DJI_CAMERA_MODEL_RESEARCH_BRIEF.md` | DJI angle conventions (NED, gimbal absolute) |
 | `notes/pipeline_todo.md` | Single task tracker |
 | `manifests/harvest_manifest.csv` | Provenance for imported artifacts |
 | `verification_images/` | Ground truth CSVs (frame_0353-0359_locations.csv) |
@@ -289,5 +312,5 @@ For enhanced GIS/remote sensing capabilities, consider integrating these MCP ser
 
 ---
 
-**Last Updated:** 2025-12-11
+**Last Updated:** 2025-12-17
 **Principle:** One blessed path, hard gates, perfect provenance.

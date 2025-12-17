@@ -713,6 +713,11 @@ def main() -> None:
         det_geojson_dir.mkdir(parents=True, exist_ok=True)
 
     summary = {
+        "schema_version": "1",
+        "purpose": "lidar_candidates",
+        # CRS is not reliably available from LAS headers across sources; leave explicit null unless
+        # upstream orchestration injects a known CRS.
+        "crs": None,
         "data_root": str(data_root),
         "params": {
             "cell_res": args.cell_res,

@@ -37,6 +37,7 @@ Last updated: 2025-12-17 UTC
 - `tests/test_thermal.py` ✅ (GDAL-dependent tests may skip)
 - `tests/test_thermal_radiometric.py` ✅ (data-dependent tests may skip)
 - `tests/test_data_2025_invariants.py` ✅
+- `tests/test_end_to_end_contract_qc.py` ✅ (schema/CRS contract harness; synthetic fixtures)
 
 ### 3. Thermal Extraction Infrastructure
 **Status:** INFRASTRUCTURE COMPLETE, CALIBRATION UNRESOLVED
@@ -75,7 +76,7 @@ Last updated: 2025-12-17 UTC
 
 - ✅ `pipelines/fusion.py` implements a nearest-neighbor spatial join (KD-tree) between LiDAR and thermal detections.
 - ⚠️ Fusion currently assumes both inputs already contain `x`/`y` in the same projected CRS (meters). It does **not** georeference thermal pixel detections.
-- ❌ `pipelines/golden.py` is still a stub (use `make golden` / `tests/test_golden_aoi.py` for guardrails).
+- ✅ `pipelines/golden.py` is now a QC harness wrapper over `tests/test_golden_aoi.py` (use `make golden`).
 
 ### 2. Ground Truth Annotation
 **Status:** 44% COMPLETE (legacy), NOT STARTED (Argentina)

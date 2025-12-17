@@ -484,6 +484,9 @@ data/intake/h30t/                                  # Symlinks for reproducible r
 ### Verify LiDAR Output
 
 ```bash
+# QC golden guardrail (engineering harness)
+make golden
+
 # Check detection count
 jq '.total_count' data/interim/lidar_test.json
 

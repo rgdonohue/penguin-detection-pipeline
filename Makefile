@@ -1,7 +1,7 @@
 # Penguin Detection Pipeline — Working Makefile
 # Principle: Only include targets that actually work
 
-.PHONY: help env validate test test-lidar thermal clean
+.PHONY: help env validate test golden test-lidar thermal clean
 
 help:
 	@echo "Penguin Detection Pipeline — Available Targets"
@@ -12,6 +12,7 @@ help:
 	@echo ""
 	@echo "Working:"
 	@echo "  make test         - Run golden AOI test suite"
+	@echo "  make golden       - Run golden AOI guardrail (QC harness)"
 	@echo "  make test-lidar   - Run LiDAR detection on sample data"
 	@echo "  make thermal      - Run H30T thermal smoke test on staged frames"
 	@echo ""
@@ -45,6 +46,15 @@ test:
 		exit 1; \
 	fi
 	@pytest tests/test_golden_aoi.py -v
+
+# Golden AOI guardrail (QC harness; does not imply calibrated thermal counts)
+golden:
+	@echo "Running golden AOI guardrail (QC harness)..."
+	@if [ ! -x ".venv/bin/python" ]; then \
+		echo "Missing .venv. Run: make env"; \
+		exit 1; \
+	fi
+	@.venv/bin/python -m pytest -q tests/test_golden_aoi.py
 
 # Test LiDAR detection on golden AOI (cloud3.las)
 test-lidar:
@@ -88,5 +98,4 @@ clean:
 # - make harvest (needs scripts/harvest_legacy.py)
 # - make thermal-ortho (full orthorectification once GDAL workflow is ready)
 # - make fusion (CLI exists; needs real input summaries with CRS x/y)
-# - make golden (needs all of the above)
 # - make rollback (needs snapshot mechanism)

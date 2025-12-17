@@ -195,6 +195,8 @@ class TestLiDARPipeline:
             data = json.load(f)
 
         # Check required keys
+        assert data.get("schema_version") == "1"
+        assert data.get("purpose") == "lidar_candidates"
         assert "files" in data, "Missing 'files' key"
         assert "total_count" in data, "Missing 'total_count' key"
         assert "params" in data, "Missing 'params' key"

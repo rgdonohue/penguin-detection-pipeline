@@ -116,10 +116,10 @@ We track progress in two parallel lanes:
 - [ ] Add explicit output labeling (`purpose=qc_alignment`, `temperature_calibrated=false`)
 
 ### E4. Golden Harness Decision (resolve ambiguity)
-**Status:** ❌ NOT STARTED
+**Status:** ✅ DONE
 
-- [ ] Option A: Implement `pipelines/golden.py` as a wrapper around existing guardrails (`tests/test_golden_aoi.py`)
-- [ ] Option B: Formally deprecate/remove `pipelines/golden.py` and document the chosen workflow
+- [x] `pipelines/golden.py` runs the golden AOI guardrail (`tests/test_golden_aoi.py`) as a QC harness
+- [x] `make golden` added as the supported entrypoint for the guardrail
 
 ---
 
@@ -186,14 +186,14 @@ Argentina data currently provides **region totals** (~3,705 counts), not per-pen
 **Current state:**
 - ✅ `pipelines/fusion.py` implements a nearest-neighbor spatial join (KD-tree) with `match_radius_m` thresholding and labels (`both` / `lidar_only` / `thermal_only`).
 - ⚠️ Inputs must already include `x`/`y` in the same projected CRS; thermal pixel detections are not georeferenced here.
-- ❌ `pipelines/golden.py` remains a stub (golden guardrails live in `tests/test_golden_aoi.py` / `make test-lidar`).
+- ✅ Golden AOI guardrail is runnable via `make golden` (QC harness; `tests/test_golden_aoi.py`).
 
 **Required implementation:**
 - [x] Spatial join (LiDAR candidates + thermal detections)
 - [x] Buffer matching (via `match_radius_m`)
 - [x] Label classification (Both / LiDAR-only / Thermal-only)
 - [ ] LiDAR-gated thermal scoring
-- [ ] `scripts/run_fusion_join.py` CLI
+- [x] `scripts/run_fusion_join.py` CLI
 - [x] `tests/test_fusion_join.py` coverage
 
 **Estimated time:** 6-8 hours
