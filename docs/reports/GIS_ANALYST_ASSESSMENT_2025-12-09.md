@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The Penguin Detection Pipeline v4.0 is a well-architected system with **production-ready LiDAR detection** and **thermal infrastructure that remains blocked by calibration issues**. The recent arrival of Argentina field data (~3,705 GPS-tagged penguin locations) presents a significant opportunity to advance thermal detection if properly georeferenced.
+The Penguin Detection Pipeline v4.0 is a well-architected system with **production-ready LiDAR detection** and **thermal infrastructure that remains blocked by calibration issues**. Argentina field observations provide **~3,705 total penguin counts** across sites (not georeferenced point locations); turning those counts into usable thermal ground truth still requires GPS→image/CRS mapping.
 
 **Bottom Line:** Deploy LiDAR immediately (with TrueView 515 parameter check). Treat thermal as experimental context only until calibration and ground truth gaps are resolved.
 
@@ -19,11 +19,11 @@ The Penguin Detection Pipeline v4.0 is a well-architected system with **producti
 
 | Component | Status | Confidence | Evidence |
 |-----------|--------|------------|----------|
-| **LiDAR Detection** | ✅ Production-ready | High | 879 detections reproducible, 12/12 tests passing, 51s runtime on 4.4GB tile |
+| **LiDAR Detection** | ✅ Production-ready | High | 802 detections reproducible, guardrails in `tests/test_golden_aoi.py` |
 | **Thermal Extraction** | ✅ Infrastructure complete | Medium | 16-bit radiometric working, H20T + H30T supported |
 | **Thermal Detection** | ⚠️ Research phase | Low | F1 scores 0.02-0.30 (frame-dependent), ~9°C calibration offset |
-| **Fusion Pipeline** | ❌ Not implemented | N/A | `pipelines/fusion.py` is a stub raising NotImplementedError |
-| **Ground Truth** | 🔄 Partially complete | Medium | Legacy: 60/137 (44%); Argentina: ~3,705 GPS waypoints pending georeferencing |
+| **Fusion Pipeline** | ✅ Partial | Medium | `pipelines/fusion.py` implements KD-tree join (requires CRS `x/y` inputs) |
+| **Ground Truth** | 🔄 Partially complete | Medium | Legacy: 60/137 (44%); Argentina: ~3,705 counts (not point locations) |
 
 ---
 
@@ -32,7 +32,7 @@ The Penguin Detection Pipeline v4.0 is a well-architected system with **producti
 ### 1. LiDAR Pipeline (Production Ready)
 
 **Strengths:**
-- Deterministic outputs (879 ± 5 detections on golden AOI)
+- Deterministic outputs (802 ± 5 detections on golden AOI)
 - Comprehensive parameter tuning for Magellanic penguins (0.2-0.6m HAG)
 - Morphological filtering with watershed splitting for clustered penguins
 - Full provenance tracking and QC visualization
@@ -75,23 +75,15 @@ The Penguin Detection Pipeline v4.0 is a well-architected system with **producti
 temperature_celsius = (DN >> 2) * 0.0625 - 273.15
 ```
 
-### 3. Fusion Pipeline (Not Implemented)
+### 3. Fusion Pipeline (Partially Implemented)
 
-The fusion stage exists only as a placeholder:
+The fusion stage now provides a generic spatial join between LiDAR and thermal detections once both are expressed in the same projected CRS (meters).
 
-```python
-# pipelines/fusion.py
-def run(params: FusionParams) -> Path:
-    raise NotImplementedError(...)
-```
-
-**Planned Capabilities:**
-- Spatial join: LiDAR candidates + thermal detections
-- Buffer matching: 0.5m radius
+**Current Capabilities:**
+- Spatial join: LiDAR candidates + thermal detections (nearest-neighbor within `match_radius_m`)
 - Label classification: Both / LiDAR-only / Thermal-only
-- LiDAR-gated thermal scoring
 
-**Estimated Implementation:** 6-8 hours
+**Remaining Work:** thermal pixel→CRS georeferencing; LiDAR-gated thermal scoring; CLI wrapper.
 
 ### 4. Argentina Field Data
 
@@ -264,7 +256,7 @@ uvx --from gdal-mcp gdal --transport stdio
 ## Deliverables Checklist
 
 ### Ready Now
-- [x] LiDAR detection on legacy golden AOI (879 detections)
+- [x] LiDAR detection on legacy golden AOI (802 detections)
 - [x] Test suite (12 golden AOI + 5 thermal tests)
 - [x] Thermal extraction infrastructure
 - [x] Provenance tracking system
@@ -291,7 +283,7 @@ The Penguin Detection Pipeline v4.0 is **architecturally sound** with a **produc
 2. **Thermal as context:** Use for visual confirmation, not automated counts
 3. **Prioritize georeferencing:** The Argentina GPS waypoints are the fastest path to thermal pipeline maturity
 
-The ~3,705 GPS-tagged penguin locations from Argentina represent a 62x increase in ground truth data. Successfully georeferencing these points to thermal imagery would transform the thermal pipeline from research to production viability.
+The ~3,705 penguins counted in Argentina field observations represent a 62x increase in available ground truth *if* converted into georeferenced labels. The current repository contains 48 GPS boundary/route waypoints; GPS→image/CRS mapping is still required before these counts can drive thermal optimisation.
 
 ---
 

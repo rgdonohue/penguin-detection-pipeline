@@ -35,7 +35,7 @@ The team has returned from Argentina with new field data, including **penguin co
 
 ### LiDAR Pipeline ✅
 - **Status:** Production-ready on tested data
-- **Performance:** 879 detections on golden test tile (reproducible)
+- **Performance:** 802 detections on golden test tile (reproducible)
 - **Argentina Readiness:** Will need parameter retuning for TrueView 515
 
 ### Thermal Pipeline ⚠️
@@ -206,5 +206,4 @@ Convert Lydia's GPS waypoints to pixel coordinates in thermal images, creating a
 
 *Review completed: 2025-12-01*  
 *Next update: Post-implementation or upon approval*
-
 

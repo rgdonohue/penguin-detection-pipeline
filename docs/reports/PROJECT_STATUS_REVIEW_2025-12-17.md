@@ -8,11 +8,11 @@
 
 ## Executive Summary
 
-The Penguin Detection Pipeline v4.0 has a **production-ready LiDAR component** with validated Argentina sensor tuning, but faces **critical infrastructure issues**: broken test suite, stale documentation (6-10 weeks old), and incomplete fusion/golden harnesses. The thermal pipeline remains in research phase with unresolved calibration issues.
+The Penguin Detection Pipeline v4.0 has a **production-ready LiDAR component** with validated Argentina sensor tuning. Earlier infrastructure issues (test failures from missing sample paths, thermal pose/rotation bugs, and fusion stub) have been addressed in-repo; the thermal pipeline remains in research phase with unresolved calibration issues.
 
-**Overall Maturity:** ~55% complete
-**Test Suite Status:** BROKEN (sample data missing, 2 thermal test failures)
-**Documentation Status:** STALE (requires immediate refresh)
+**Overall Maturity:** ~65% complete
+**Test Suite Status:** GREEN (`pytest` restricted to `tests/`; 40 passed, 2 skipped due to missing real thermal/DSM fixtures)
+**Documentation Status:** UPDATED (key baselines and blockers refreshed; still requires consolidation)
 
 ---
 
@@ -23,9 +23,9 @@ The Penguin Detection Pipeline v4.0 has a **production-ready LiDAR component** w
 | Aspect | Status | Evidence |
 |--------|--------|----------|
 | Core Algorithm | Production-ready | `scripts/run_lidar_hag.py` (620+ lines) |
-| Golden AOI Baseline | 879 detections | Documented in multiple files |
+| Golden AOI Baseline | 802 detections | Guardrail baseline after fixing order-dependent quantile updates |
 | Argentina Tuning | Validated | DJI L2: +6% error, TrueView 515: +1% error |
-| Test Suite | BROKEN | `data/legacy_ro/.../LiDAR/sample/` empty |
+| Test Suite | PASSING | `pytest.ini` limits collection to `tests/`; golden AOI stages `cloud3.las` via temp data-root |
 
 **Argentina LiDAR Catalogue** (verified from `data/2025/lidar_catalogue_full.json`):
 - Total files: 24
@@ -45,9 +45,9 @@ The Penguin Detection Pipeline v4.0 has a **production-ready LiDAR component** w
 |--------|--------|----------|
 | 16-bit Extraction | Working | `pipelines/thermal.py:97-104` |
 | Camera Model | Implemented | `pipelines/thermal.py:478-523` (hand-rolled) |
-| Scale Heuristics | Fragile | Magic constants at lines 78-83 |
+| Scale Heuristics | Profiled | `THERMAL_SENSOR_PROFILES` keyed by raw shape (H20T/H30T) |
 | Calibration | UNRESOLVED | Two different offset issues documented |
-| Test Suite | FAILING | 2 failures in `test_thermal.py` |
+| Test Suite | PASSING (with skips) | Data/DSM-dependent tests skip when fixtures absent |
 
 **Calibration Issues** (two distinct problems):
 
@@ -57,37 +57,32 @@ The Penguin Detection Pipeline v4.0 has a **production-ready LiDAR component** w
 2. **Biological Offset (~30°C)**: Expected penguin temps (25-30°C) vs observed (~-5°C)
    - Source: `docs/supplementary/RADIOMETRIC_INTEGRATION.md:62-76`
 
-**Thermal Scale Constants** (`pipelines/thermal.py:78-83`):
+**Thermal Scale Profiles** (current structure in `pipelines/thermal.py`):
 ```python
-DEFAULT_THERMAL_SCALE = 64.0
-ALTERNATE_SCALES = (96.0, 80.0, 128.0)
+THERMAL_SENSOR_PROFILES = {
+    (512, 640): ThermalSensorProfile(name="H20T", default_scale=64.0, alternate_scales=(96.0, 80.0, 128.0)),
+    (1024, 1280): ThermalSensorProfile(name="H30T", default_scale=64.0, alternate_scales=(96.0, 80.0, 128.0)),
+}
 ```
-These are undocumented heuristics for H30T sensor modes.
+These profiles are explicit and tested; the ~9°C calibration offset remains unresolved.
 
 ### Fusion Pipeline
 
 | Aspect | Status | Evidence |
 |--------|--------|----------|
-| Implementation | STUB ONLY | `pipelines/fusion.py:29` raises `NotImplementedError` |
-| Golden Harness | STUB ONLY | `pipelines/golden.py:30` raises `NotImplementedError` |
+| Implementation | PARTIAL | `pipelines/fusion.py` implements KD-tree join (requires CRS `x/y` inputs) |
+| Golden Harness | STUB ONLY | `pipelines/golden.py` still raises `NotImplementedError` |
 
-Both files contain placeholder dataclasses but no functional code.
+Fusion is implemented as a generic spatial join only; thermal pixel→CRS georeferencing is out of scope for this module.
 
 ---
 
 ## 2. Test Infrastructure Status
 
-### Current Failures
+### Current Status
 
-| Test File | Issue | Line | Root Cause |
-|-----------|-------|------|------------|
-| `test_golden_aoi.py` | Data missing | 51 | `LiDAR/sample/cloud3.las` does not exist |
-| `test_thermal.py` | Rotation det=-1 | 76 | Nadir case returns inverted matrix |
-| `test_thermal.py` | Pose columns | 116 | Stricter validation in `pipelines/thermal.py:401` |
-
-### Passing Tests
-
-- `tests/test_thermal_radiometric.py` — 5 tests (thermal extraction)
+- `pytest.ini` restricts collection to `tests/` (vendored legacy trees under `data/legacy_ro` are not collected).
+- Current suite passes locally: 40 passed, 2 skipped (skip reasons: missing real thermal frames / DSM).
 
 ### Test Coverage Gap
 

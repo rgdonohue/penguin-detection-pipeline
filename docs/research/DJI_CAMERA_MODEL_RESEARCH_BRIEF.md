@@ -1,7 +1,7 @@
 # Research Brief: DJI Drone Camera Model & Angle Conventions
 
 **Date:** 2025-12-17
-**Priority:** HIGH (blocking thermal pipeline)
+**Priority:** HIGH (angle conventions still unverified)
 **Requested by:** Penguin Detection Pipeline Team
 **Deliverable:** Technical report with validated rotation matrix formula
 
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-We are building a thermal orthorectification pipeline for DJI drone imagery (H20T/H30T sensors). Our current camera model implementation produces an invalid rotation matrix (determinant = -1, a reflection instead of a rotation) for nadir-pointing cases. We need authoritative documentation on DJI's angle conventions to fix this.
+We are building a thermal orthorectification pipeline for DJI drone imagery (H20T/H30T sensors). The project previously produced an invalid rotation matrix (determinant = -1) for nadir-pointing cases; the implementation has since been corrected to return proper rotations (determinant = +1) and the unit tests now pass. We still need authoritative documentation on DJI's angle conventions to validate the model against real-world frames.
 
 ---
 

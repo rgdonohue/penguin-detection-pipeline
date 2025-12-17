@@ -19,7 +19,7 @@ The team has returned from Argentina with new field data including GPS waypoints
 
 ### LiDAR Pipeline
 - ✅ **Status:** Production-ready on tested data
-- ✅ **Performance:** 879 detections on golden test tile (reproducible)
+- ✅ **Performance:** 802 detections on golden test tile (reproducible)
 - ⚠️ **Argentina Data:** TrueView 515 untested; will need parameter retuning
 
 ### Thermal Pipeline
@@ -365,5 +365,4 @@ def gps_to_pixel(gps_lat, gps_lon, gps_alt, image_path, dsm_path=None):
 
 *Plan created: 2025-12-01*  
 *Status: Planning - Awaiting approval to proceed*
-
 
