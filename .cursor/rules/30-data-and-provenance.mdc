@@ -1,0 +1,10 @@
+---
+description: Data handling, manifests, and repo hygiene
+globs: ["**/*"]
+alwaysApply: false
+---
+
+- Do not commit large binary data or harvested artifacts. Track provenance via `manifests/harvest_manifest.csv` instead.
+- If a script produces a new on-disk artifact intended to be kept, place it under `data/interim/` (temporary) or `data/processed/` (blessed outputs) and document the path + purpose.
+- Treat credentials/tokens as forbidden; never add secrets to repo or logs.
+- If you introduce new outputs, keep filenames and schemas stable and update any downstream readers/tests.

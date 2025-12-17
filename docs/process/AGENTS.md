@@ -23,3 +23,9 @@ Write concise, imperative commit subjects (`stage: action`, e.g. `lidar: clamp h
 
 ## Security & Data Handling
 Treat `data/legacy_ro/` as immutable. Copy artifacts through harvesting scripts only, populate `manifests/harvest_manifest.csv` with SHA256 and size, and keep credentials or API tokens out of the repo. Scrub logs before sharing externally and note any sensitive paths in PR descriptions.
+
+## Cursor IDE Project Rules
+This repo uses Cursor **Project Rules** under `.cursor/rules/*.mdc` to keep AI-assisted edits aligned with project constraints.
+
+- The rule `00-core-invariants.mdc` is **always applied** and encodes non-negotiables like `data/legacy_ro/` immutability, determinism, and the single sources of truth (`RUNBOOK.md`, `docs/reports/STATUS.md`, `notes/pipeline_todo.md`).
+- Other rules are scoped by file globs (Python quality, geospatial CRS correctness, testing guardrails, git hygiene) and are attached automatically when working in matching files.

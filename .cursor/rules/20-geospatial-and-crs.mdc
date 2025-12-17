@@ -1,0 +1,10 @@
+---
+description: Geospatial correctness (CRS, units, joins)
+globs: ["pipelines/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
+alwaysApply: false
+---
+
+- Default CRS for Argentina outputs is **EPSG:32720** (UTM 20S). Always label CRS explicitly and keep units consistent.
+- Never silently mix pixel coordinates with projected coordinates. If converting between pixel↔CRS, document the transform and validate with a small numeric sanity check.
+- Spatial joins must be CRS-aware; reproject explicitly before nearest-neighbor or distance calculations.
+- Prefer stable sorting before writing outputs so file diffs are deterministic.

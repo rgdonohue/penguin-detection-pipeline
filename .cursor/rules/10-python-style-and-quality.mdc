@@ -1,0 +1,10 @@
+---
+description: Python style, typing, and quality gates
+globs: ["**/*.py"]
+alwaysApply: false
+---
+
+- Target Python 3.11. Use 4-space indentation, `snake_case`, and type hints for new/changed functions.
+- Prefer small, testable functions with clear IO contracts; add short docstrings noting inputs, side effects, and outputs.
+- When you change Python code, run formatting/linting expectations consistent with the repo (e.g. `ruff format` / `ruff check` when available).
+- Avoid hidden global state; keep stage parameters in a single dataclass/config object when appropriate.

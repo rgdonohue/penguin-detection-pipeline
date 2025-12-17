@@ -1,0 +1,14 @@
+---
+description: Core project invariants (provenance, determinism, sources of truth)
+globs: ["**/*"]
+alwaysApply: true
+---
+
+- Do not modify anything under `data/legacy_ro/` (read-only legacy mount). If legacy artifacts are needed, create a harvested copy under `data/intake/` and record SHA256 + size + source path in `manifests/harvest_manifest.csv`.
+- Preserve determinism: pipeline runs must be repeatable for identical inputs. Avoid non-deterministic ordering, random seeds without explicit control, and time-dependent outputs.
+- Keep the blessed workflow consistent with the repo:
+  - Tasks live in `notes/pipeline_todo.md`
+  - Current state lives in `docs/reports/STATUS.md`
+  - Commands live in `RUNBOOK.md`
+- Prefer library logic in `pipelines/` and thin CLI wrappers in `scripts/`.
+- If a change introduces/changes a user-facing command, update `RUNBOOK.md` in the same change.

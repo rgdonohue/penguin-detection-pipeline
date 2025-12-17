@@ -1,0 +1,9 @@
+---
+description: Git hygiene (commits/PRs/provenance notes)
+globs: ["**/*"]
+alwaysApply: false
+---
+
+- Commit messages: concise, imperative, and scoped (e.g. `lidar: ...`, `thermal: ...`, `fusion: ...`, `docs: ...`).
+- If harvesting/importing is involved, include provenance notes (legacy source path + SHA256) in the PR/commit body and ensure manifest entries exist.
+- Don’t mix unrelated refactors with behavior changes; keep diffs reviewable.
