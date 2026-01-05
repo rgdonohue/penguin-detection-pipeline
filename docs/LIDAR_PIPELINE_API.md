@@ -96,6 +96,10 @@ python3 scripts/run_lidar_hag.py \
 |-----------|-------------|
 | `--plots` | Generate HAG + detection PNG per tile |
 | `--emit-geojson` | Write GeoJSON per tile |
+| `--crs-epsg` / `--crs-wkt` | CRS for input XY coordinates (required for GeoJSON/GPKG outputs) |
+| `--geojson-wgs84` | Transform GeoJSON output to EPSG:4326 (requires CRS + pyproj) |
+| `--emit-gpkg` | Write GeoPackage with `detections` (+ `detections_deduped` if enabled) |
+| `--gpkg-path` | Optional GeoPackage path |
 | `--emit-csv` | Write aggregated CSV |
 | `--verbose` | Print progress |
 
@@ -160,9 +164,13 @@ Each detection becomes a Point feature with properties:
 - `area_cells`, `area_m2`
 - `circularity`, `solidity`
 - `hag_mean`, `hag_max`
-- `source_tile` (when merged)
+- `tile`, `file`, `id` (stable join keys for fusion/audit)
 
-CRS: EPSG:32720 (UTM Zone 20S)
+Each GeoJSON includes a `metadata` object describing coordinates:
+- `metadata.crs`: `{ "epsg": <int> }` and/or `{ "wkt": "<...>" }` (required unless you pass `--allow-unknown-crs`)
+- `metadata.coord_units`: `"meters"` for projected XY, or `"degrees"` when `--geojson-wgs84` is used
+
+If you want strict RFC 7946-style GeoJSON (WGS84 lon/lat), run with `--geojson-wgs84` (requires `--crs-epsg/--crs-wkt`).
 
 ## Usage Examples
 
@@ -178,7 +186,7 @@ python3 scripts/run_lidar_hag.py \
 python3 scripts/run_lidar_hag.py \
   --data-root data/2025/Caleta\ Small\ Island \
   --out data/interim/detections.json \
-  --plots --emit-geojson --verbose
+  --plots --emit-geojson --crs-epsg 32720 --verbose
 ```
 
 ### Production Run (tuned for DJI L2)
@@ -189,7 +197,7 @@ python3 scripts/run_lidar_hag.py \
   --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 60 \
   --dedupe-radius-m 0.5 \
-  --emit-geojson --plots
+  --emit-geojson --crs-epsg 32720 --plots --strict-outputs
 ```
 
 ## Algorithm Details
@@ -214,7 +222,10 @@ Uses union-find clustering:
 1. Build KD-tree of all detection centroids
 2. Query neighbors within `dedupe_radius_m`
 3. Union overlapping detections
-4. Count unique cluster roots
+4. Choose one deterministic representative per cluster (stable by `file`, `id`, `x`, `y`)
+5. Emit:
+   - `total_count_deduped` in the main summary JSON
+   - `lidar_hag_detections_deduped.csv` / `lidar_hag_detections_deduped.json` (includes `dedupe_index` for auditability)
 
 ## Dependencies
 

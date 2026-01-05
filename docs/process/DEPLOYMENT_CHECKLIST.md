@@ -52,7 +52,7 @@
 
 ### Software Installation
 
-- [ ] Python 3.11+ installed: Version _______
+- [ ] Python 3.12.x installed: Version _______
 - [ ] Repository cloned to field laptop
 - [ ] Virtual environment created: `make env`
 - [ ] Dependencies installed successfully

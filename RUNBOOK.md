@@ -19,14 +19,14 @@ Last updated: 2025-12-17
 Quick run:
 ```bash
 source .venv/bin/activate
-pytest -q tests/test_golden_aoi.py tests/test_data_2025_invariants.py
+.venv/bin/python -m pytest -q tests/test_golden_aoi.py tests/test_data_2025_invariants.py
 ```
 
 ---
 
 ## Prerequisites
 
-- Python 3.11+ (verify: `python3 --version`)
+- Python 3.12.x (verify: `python3.12 --version`)
 - Git (to clone/navigate repo)
 - pip (comes with Python)
 
@@ -41,7 +41,7 @@ pytest -q tests/test_golden_aoi.py tests/test_data_2025_invariants.py
 ./scripts/validate_environment.sh
 
 # This script will:
-# 1. Check Python 3.11+ is available
+# 1. Check Python 3.12 is available
 # 2. Create .venv virtual environment if needed
 # 3. Install dependencies from requirements.txt
 # 4. Validate all required modules
@@ -65,17 +65,17 @@ make env
 source .venv/bin/activate
 
 # Verify installation
-python3 -c "import laspy, scipy, skimage, pytest; print('✓ Dependencies installed')"
+.venv/bin/python -c "import laspy, scipy, skimage, pytest; print('✓ Dependencies installed')"
 
 # Run golden AOI tests
-pytest tests/test_golden_aoi.py -v
+.venv/bin/python -m pytest tests/test_golden_aoi.py -v
 ```
 
 ### Manual Setup: Option 2 - Direct venv Creation
 
 ```bash
 # Create virtual environment
-python3 -m venv .venv
+python3.12 -m venv .venv
 
 # Activate environment
 source .venv/bin/activate
@@ -97,7 +97,7 @@ pip install laspy scipy scikit-image numpy matplotlib pytest
 ```
 
 **Core dependencies (LiDAR stage):**
-- Python 3.11+
+- Python 3.12.x
 - laspy >= 2.4.0 (LiDAR I/O)
 - scipy >= 1.10.0 (scientific computing)
 - scikit-image >= 0.20.0 (image processing)
@@ -119,7 +119,7 @@ pip install laspy scipy scikit-image numpy matplotlib pytest
 
 # Manual validation steps
 source .venv/bin/activate
-pytest tests/test_golden_aoi.py -v
+.venv/bin/python -m pytest tests/test_golden_aoi.py -v
 make test-lidar
 ```
 
@@ -138,8 +138,10 @@ python3 scripts/run_lidar_hag.py \
   --cell-res 0.25 \
   --hag-min 0.2 --hag-max 0.6 \
   --min-area-cells 2 --max-area-cells 80 \
-  --emit-geojson --plots
+  --emit-geojson --crs-epsg 32720 --plots --strict-outputs
 ```
+
+**Production policy:** do not use `--allow-unknown-crs` or `--skip-oversized-tiles` for final counts.
 
 **Expected output:**
 ```json
@@ -159,6 +161,71 @@ python3 scripts/run_lidar_hag.py \
 
 **Status:** ✅ TESTED (legacy: 2025-10-08; Argentina: 2025-12-10)
 
+### 1b. LiDAR Output Semantics + “Official” Determinism Policy
+
+LiDAR outputs are explicitly **candidates**, not guaranteed individuals:
+- Contract is embedded in summary JSON under `contract` and defined in `pipelines/contracts.py`.
+
+For “official/defensible” runs where strict reproducibility matters, prefer deterministic estimators:
+- Recommended: `--ground-method p05 --top-method max`
+- Treat `--top-method p95` as **experimental** (streaming quantile sensitivity to chunking/order).
+
+Reference policy constants: `pipelines/lidar_profiles.py` (`OFFICIAL_DETERMINISTIC`).
+
+### 1c. AOI-Clipped Evaluation (QC / Alignment)
+
+Compute counts/densities inside AOI polygons (GeoJSON FeatureCollection). AOIs must be in the **same CRS** as the LiDAR detections (typically projected meters).
+
+```bash
+source .venv/bin/activate
+
+python scripts/evaluate_lidar_aoi.py \
+  --lidar-summary data/interim/lidar_test.json \
+  --aoi-geojson path/to/aoi_polygons.geojson \
+  --aoi-crs-epsg 32720 \
+  --out data/interim/lidar_aoi_eval.json
+```
+
+If you want the exact detections included in each AOI (can be large):
+
+```bash
+python scripts/evaluate_lidar_aoi.py \
+  --lidar-summary data/interim/lidar_test.json \
+  --aoi-geojson path/to/aoi_polygons.geojson \
+  --aoi-crs-epsg 32720 \
+  --emit-detection-ids \
+  --out data/interim/lidar_aoi_eval_with_ids.json
+```
+
+### 1d. LiDAR Label-Sample Export (Precision / FP-Rate Bootstrap)
+
+Export a deterministic, stratified sample of detections for manual labeling (TP/FP/uncertain), plus optional small PNG crops.
+
+```bash
+source .venv/bin/activate
+
+python scripts/export_lidar_label_sample.py \
+  --lidar-summary data/interim/lidar_test.json \
+  --out-dir data/interim/lidar_label_sample \
+  --n 80 \
+  --seed 0
+```
+
+Fast mode (no crops):
+
+```bash
+python scripts/export_lidar_label_sample.py \
+  --lidar-summary data/interim/lidar_test.json \
+  --out-dir data/interim/lidar_label_sample \
+  --n 80 \
+  --seed 0 \
+  --no-crops
+```
+
+Notes:
+- Crops are best-effort; the primary artifacts are `label_sample.csv` and `label_sample_manifest.json`.
+- Crop generation streams the LAS file referenced by each detection’s `file` field; keep those paths accessible.
+
 ---
 
 ## Argentina LiDAR Detection (Validated 2025-12-10)
@@ -176,7 +243,7 @@ python3 scripts/run_lidar_hag.py \
   --out data/interim/caleta_small_island.json \
   --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 60 \
-  --dedupe-radius-m 0.5 --emit-geojson --plots
+  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
 
 # Caleta Tiny Island (validated: 340 detections vs 321 ground truth = +6%)
 python3 scripts/run_lidar_hag.py \
@@ -184,7 +251,7 @@ python3 scripts/run_lidar_hag.py \
   --out data/interim/caleta_tiny_island.json \
   --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 60 \
-  --dedupe-radius-m 0.5 --emit-geojson --plots
+  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
 ```
 
 **Key DJI L2 Parameters:**
@@ -211,7 +278,7 @@ python3 scripts/run_lidar_hag.py \
   --out data/interim/san_lorenzo_box_count.json \
   --cell-res 0.3 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 50 \
-  --dedupe-radius-m 0.5 --emit-geojson --plots
+  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
 ```
 
 **Key TrueView 515 Parameters:**
@@ -272,7 +339,7 @@ python scripts/run_thermal_ortho.py verify-grid \
 
 ```bash
 # Create new conda environment with GDAL pre-built
-conda create -n penguins-thermal python=3.11
+conda create -n penguins-thermal python=3.12
 conda activate penguins-thermal
 
 # Install GDAL stack from conda-forge

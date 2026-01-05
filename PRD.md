@@ -120,9 +120,8 @@ pandas>=2.3.3
 
 **Setup:**
 ```bash
-python3 -m venv .venv
+make env
 source .venv/bin/activate
-pip install -r requirements.txt
 ```
 
 `.gitignore` essentials:
@@ -310,7 +309,7 @@ python scripts/run_fusion_join.py \
 .PHONY: env harvest golden lidar thermal fusion qc
 
 env:
-	python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+	python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 harvest:
 	python scripts/harvest_legacy.py --config manifests/harvest_rules.yml

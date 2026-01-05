@@ -94,8 +94,10 @@ penguins-4.0/
 make env && source .venv/bin/activate
 
 # Verify installation
-python3 -c "import laspy, scipy, skimage, pytest; print('✓ Core dependencies OK')"
+.venv/bin/python -c "import laspy, scipy, skimage, pytest; print('✓ Core dependencies OK')"
 ```
+
+**Python baseline:** 3.12.x (enforced by `.python-version` and `make env`).
 
 ### Working Commands (Tested)
 

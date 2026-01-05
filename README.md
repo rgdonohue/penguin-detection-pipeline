@@ -25,6 +25,8 @@ make validate
 python scripts/run_lidar_hag.py \
     --data-root field_data/lidar/ \
     --out results/detections.json \
+    --emit-geojson --crs-epsg 32720 \
+    --strict-outputs \
     --plots
 ```
 
@@ -32,6 +34,7 @@ python scripts/run_lidar_hag.py \
 - `results/detections.json` - Candidate counts and statistics
 - `results/lidar_hag_plots/` - Visual QC plots
 - `results/lidar_hag_geojson/` - GIS-compatible spatial layers
+- `results/lidar_hag_detections.gpkg` - Projection-preserving GIS layer (optional, via `--emit-gpkg`)
 
 **Expected processing time:** 5-15 minutes per tile (depending on size)
 
@@ -79,7 +82,7 @@ GPS waypoints extracted to `data/processed/san_lorenzo_waypoints.csv`.
 - Multi-core CPU (LiDAR processing is parallelizable)
 
 **Software:**
-- Python 3.11+
+- Python 3.12.x
 - macOS, Linux, or Windows with WSL2
 - For thermal: GDAL/rasterio (see `requirements-full.txt`)
 
@@ -91,14 +94,14 @@ GPS waypoints extracted to `data/processed/san_lorenzo_waypoints.csv`.
 
 ```bash
 # Create virtual environment
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install core dependencies
 pip install -r requirements.txt
 
 # Validate installation
-pytest tests/test_golden_aoi.py -v
+.venv/bin/python -m pytest tests/test_golden_aoi.py -v
 ```
 
 ### Option 2: Full Setup (LiDAR + Thermal)
@@ -107,7 +110,7 @@ Thermal processing requires GDAL. See `requirements-full.txt` for detailed insta
 
 **Quick path (conda):**
 ```bash
-conda create -n penguins-thermal python=3.11
+conda create -n penguins-thermal python=3.12
 conda activate penguins-thermal
 conda install -c conda-forge gdal rasterio pyproj
 pip install -r requirements.txt
@@ -135,7 +138,9 @@ python scripts/run_lidar_hag.py \
     --hag-max 0.6 \
     --min-area-cells 2 \
     --max-area-cells 80 \
-    --emit-geojson \
+    --emit-geojson --crs-epsg 32720 \
+    --emit-gpkg \
+    --strict-outputs \
     --plots
 ```
 

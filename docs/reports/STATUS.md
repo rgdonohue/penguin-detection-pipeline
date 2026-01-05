@@ -1,34 +1,37 @@
 # Project Status — Honest Assessment
 
-Last updated: 2025-12-17 UTC
+Last updated: 2025-12-21 UTC
 
 ---
 
 ## ✅ What Actually Works
 
 ### 1. LiDAR Detection Pipeline
-**Status:** PRODUCTION-READY (Argentina sensors validated)
+**Status:** RUNS SUCCESSFULLY; VALIDATION IN PROGRESS (SEMANTICS LOCKED, AOI EVAL NEXT)
 
 - **Script:** `scripts/run_lidar_hag.py` (620+ lines, streaming architecture)
 - **Dependencies:** `pipelines/utils/provenance.py`, laspy, scipy, scikit-image
 - **Golden AOI baseline:** 802 candidates on cloud3.las (guardrail test)
-- **Argentina validation (2025-12-10):**
-  - DJI L2: +6% error (340 detections vs 321 ground truth)
-  - TrueView 515: +1% error (108 detections vs 107 ground truth)
 - **Outputs:** JSON, GeoJSON, QC plots, provenance tracking
 - **Makefile target:** `make test-lidar`
 
-**Argentina Data Processed:**
+**Argentina Data Processed (2025-12-21):**
 - 24 LiDAR files catalogued
-- 754M points total
+- 754M points total (100% processed)
 - 25.8 GB across DJI L2 and TrueView 515 sensors
+
+**VALIDATION CAVEATS (see `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md`):**
+- Previous "+6% / +1% error" claims were based on box count comparisons where tile extents ≠ counted areas
+- Top-surface estimator (`p95`) is an approximate streaming quantile sensitive to order/chunking
+- Detection semantics are now explicitly encoded as **candidates (blob centroids), not guaranteed individuals** (see `pipelines/contracts.py`)
+- AOI-clipped precision not yet computed for any site
 
 ### 2. Foundation Infrastructure
 **Status:** WORKING
 
 - **Legacy data mounts:** Read-only symlinks to 4 projects ✅
 - **Directory structure:** scripts/, pipelines/, data/, manifests/, tests/ ✅
-- **Environment spec:** `requirements.txt` (Python 3.11+ recommended) ✅
+- **Environment spec:** `requirements.txt` (Python 3.12.x baseline) ✅
 - **Makefile:** Working targets for env, test, test-lidar, clean ✅
 
 **Test Suite (core):**
@@ -104,7 +107,7 @@ Last updated: 2025-12-17 UTC
 
 | Component | Status | Confidence | Blocker |
 |-----------|--------|------------|---------|
-| LiDAR Detection | Production | High | None |
+| LiDAR Detection | Runs, unvalidated | Medium | AOI alignment, detection semantics |
 | LiDAR Tests | Passing | High | None |
 | Thermal Extraction | Working | Medium | Calibration offset |
 | Thermal Detection | Research | Low | F1 < 0.1 on most frames |
@@ -128,21 +131,24 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 
 ### Immediate Blockers (fix before any other work)
 
-1. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
-2. **Resolve thermal calibration** — address the documented offsets before operational use
-3. **Complete ground truth** — finish legacy frames and implement Argentina GPS→pixel projection
+1. **Define detection semantics** — what does one LiDAR detection represent? (individual penguin, blob center, occupied cell)
+2. **Implement AOI-clipped evaluation** — build precise polygon boundaries for each counted area; no count comparisons without AOI clipping
+3. **Lock top-surface estimator** — use `max` (deterministic) or implement true per-cell quantile
+4. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
+5. **Resolve thermal calibration** — address the documented offsets before operational use
 
-### Short-term (1-2 weeks)
+### Short-term
 
-4. Complete legacy ground truth (4 frames, 77 penguins)
-5. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
-6. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
+6. Manual labeling of ~50-100 LiDAR detections (within AOI) to compute precision
+7. Complete legacy ground truth (4 frames, 77 penguins)
+8. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
+9. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
 
-### Medium-term (1 month)
+### Medium-term
 
-7. Georeference Argentina GPS waypoints (~9-15 hours)
-8. Resolve thermal calibration (investigate 9°C and 30°C offsets)
-9. Batch thermal processing on full dataset
+10. Georeference Argentina GPS waypoints
+11. Resolve thermal calibration (investigate 9°C and 30°C offsets)
+12. Ground model experiment — compare `min` vs `p05` vs CSF on same data with AOI clipping
 
 ---
 
@@ -155,11 +161,13 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 | Task tracking | `notes/pipeline_todo.md` |
 | Argentina tuning | `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md` |
 | This status | `docs/reports/STATUS.md` |
+| LiDAR honest assessment | `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md` |
 | Detailed review | `docs/reports/PROJECT_STATUS_REVIEW_2025-12-17.md` |
+| Tile overlap evidence | `data/interim/tile_overlap_analysis.json` |
 
 ---
 
-## ✅ Argentina LiDAR Parameters (Validated)
+## ✅ Argentina LiDAR Parameters (Working, Pending Validation)
 
 ### DJI L2 (Caleta sites)
 ```bash

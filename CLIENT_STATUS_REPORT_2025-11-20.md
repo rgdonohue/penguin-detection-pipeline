@@ -164,7 +164,7 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
 - Coordinates: Tested with UTM Zone 20S; other projected systems should work if consistent across inputs
 
 **System Requirements:**
-- Python 3.11+ (specific version required)
+- Python 3.12.x (baseline for reproducibility)
 - 16 GB RAM recommended
 - 100 GB storage for full dataset
 - GDAL/rasterio for thermal processing (complex installation)

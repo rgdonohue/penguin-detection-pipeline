@@ -532,7 +532,7 @@ open processed/lidar_hag_plots/*.png
 **Minimum:**
 - Laptop: 16GB RAM, 50GB free disk, multi-core CPU
 - OS: macOS, Linux, or Windows with WSL2
-- Software: Python 3.11+, dependencies pre-installed
+- Software: Python 3.12.x, dependencies pre-installed
 - Peripherals: Mouse, external display (for QC review)
 
 **Recommended:**

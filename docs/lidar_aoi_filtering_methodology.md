@@ -30,7 +30,7 @@ Introduce an **optional** Area of Interest (AOI) filter for the LiDAR Height-Abo
      --cell-res 0.25 \
      --hag-min 0.2 --hag-max 0.6 \
      --min-area-cells 2 --max-area-cells 80 \
-     --emit-geojson --plots \
+     --emit-geojson --crs-epsg <EPSG> --plots \
      --aoi data/intake/client_habitat.geojson
    ```
    - Script internally clips detections whose centroids fall outside the AOI; both raw and filtered counts are emitted in the summary JSON.
