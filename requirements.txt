@@ -1,5 +1,5 @@
 # Penguin Detection Pipeline - Core Dependencies (LiDAR Stage)
-# Python 3.11+ required
+# Python 3.12.x required (baseline for reproducibility)
 # Install: python -m pip install -r requirements.txt
 
 # LiDAR Processing

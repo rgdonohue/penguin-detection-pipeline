@@ -1,5 +1,5 @@
 # Penguin Detection Pipeline - Full Dependencies (All Stages)
-# Python 3.11+ required
+# Python 3.12.x baseline
 
 # Core dependencies (LiDAR stage)
 -r requirements.txt
@@ -17,7 +17,7 @@ pandas>=2.3.3
 # ---------------------------------------------
 # Create a conda environment with GDAL pre-built:
 #
-#   conda create -n penguins-thermal python=3.11
+#   conda create -n penguins-thermal python=3.12
 #   conda activate penguins-thermal
 #   conda install -c conda-forge gdal rasterio pyproj geopandas
 #   pip install -r requirements.txt  # Install remaining dependencies

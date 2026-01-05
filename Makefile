@@ -20,11 +20,21 @@ help:
 	@echo "  make clean        - Remove interim files"
 
 # Environment setup
+PYTHON ?= python3.12
+
 env:
 	@echo "Setting up virtual environment..."
+	@if ! command -v "$(PYTHON)" >/dev/null 2>&1; then \
+		echo "✗ $(PYTHON) not found in PATH"; \
+		echo "  Install Python 3.12.x and re-run (or override: make env PYTHON=/path/to/python3.12)"; \
+		exit 1; \
+	fi
+	@$(PYTHON) -c 'import sys; v=sys.version_info; assert (v.major,v.minor)==(3,12), f\"Expected Python 3.12, got {v.major}.{v.minor}\"'
 	@if [ ! -d ".venv" ]; then \
-		python3 -m venv .venv; \
+		$(PYTHON) -m venv .venv; \
 		echo "✓ Virtual environment created"; \
+	else \
+		.venv/bin/python -c 'import sys; v=sys.version_info; assert (v.major,v.minor)==(3,12), f\".venv is not Python 3.12 (got {v.major}.{v.minor}). Remove .venv and rerun make env.\"'; \
 	fi
 	@.venv/bin/pip install -q -r requirements.txt
 	@echo "✓ Dependencies installed"
@@ -36,16 +46,14 @@ validate:
 	@echo "Running environment validation..."
 	@./scripts/validate_environment.sh
 
-# Run golden AOI test suite (requires venv active)
+# Run golden AOI test suite (venv required)
 test:
 	@echo "Running golden AOI test suite..."
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "⚠️  Warning: Virtual environment not active"; \
-		echo "   Run: source .venv/bin/activate"; \
-		echo "   Or use: .venv/bin/pytest tests/test_golden_aoi.py -v"; \
+	@if [ ! -x ".venv/bin/python" ]; then \
+		echo "Missing .venv. Run: make env"; \
 		exit 1; \
 	fi
-	@pytest tests/test_golden_aoi.py -v
+	@.venv/bin/python -m pytest tests/test_golden_aoi.py -v
 
 # Golden AOI guardrail (QC harness; does not imply calibrated thermal counts)
 golden:
@@ -63,13 +71,13 @@ test-lidar:
 		src=$$(python3 -c "from pathlib import Path; print(Path('data/legacy_ro/penguin-2.0/data/raw/LiDAR/cloud3.las').resolve())"); \
 		if [ ! -f "$$src" ]; then echo "Missing golden AOI file: $$src"; rm -rf "$$tmpdir"; exit 1; fi; \
 		ln -sf "$$src" "$$tmpdir/cloud3.las"; \
-		MPLCONFIGDIR="data/interim/mplconfig" python3 scripts/run_lidar_hag.py \
+		MPLCONFIGDIR="data/interim/mplconfig" .venv/bin/python scripts/run_lidar_hag.py \
 			--data-root "$$tmpdir" \
 			--out data/interim/lidar_test.json \
 			--cell-res 0.25 \
 			--hag-min 0.2 --hag-max 0.6 \
 			--min-area-cells 2 --max-area-cells 80 \
-			--emit-geojson --plots; \
+			--emit-geojson --crs-epsg 32720 --plots --strict-outputs; \
 		rm -rf "$$tmpdir"
 	@echo ""
 	@echo "✓ LiDAR detection complete"
@@ -79,7 +87,7 @@ test-lidar:
 
 thermal:
 	@echo "Running thermal smoke test on staged H30T frames..."
-	@python3 scripts/run_thermal_smoketest.py \
+	@.venv/bin/python scripts/run_thermal_smoketest.py \
 		--input-dir data/intake/h30t \
 		--selection-mode per-dir \
 		--limit 0 \
