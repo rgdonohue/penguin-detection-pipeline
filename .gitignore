@@ -36,6 +36,15 @@ data/**
 !data/processed/
 !data/processed/.gitkeep
 
+# Large binary files (LiDAR point clouds, archives)
+*.las
+*.LAS
+*.laz
+*.LAZ
+*.zip
+*.7z
+*.tar.gz
+
 # QC outputs
 qc/panels/**
 qc/*.zip
@@ -65,3 +74,7 @@ dist/
 
 # Rollback snapshots
 .rollback/
+
+# Note: Large PDFs (>1MB) are blocked by pre-commit hooks.
+# Exception: docs/GPS Ground Truthing Notes 2025 - RD.pdf (5.4MB) is already in history.
+# Future large PDFs should use Git LFS or be stored outside the repo.
