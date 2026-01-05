@@ -28,7 +28,45 @@ import shutil
 TEST_OUTPUT_DIR = Path("data/interim/test_golden")
 EXPECTED_DETECTION_COUNT = 802
 TOLERANCE = 5  # Allow ±5 detections for minor numerical variations
-EXPECTED_SIGNATURE_SHA256 = "2fa9ef298f37ef70d654c44728d69938db852cd2ee0b40e170dfea94b115c2fc"
+EXPECTED_SIGNATURE_SHA256 = "3193848a41325389326c44a5bf4580f7f6325423b7140f51ac2a0d980a08d9d7"
+
+
+def _stable_params(params: object) -> dict:
+    """Return output-affecting params only (exclude run-specific paths and output toggles)."""
+    if not isinstance(params, dict):
+        return {}
+    allow = {
+        # Core geometry
+        "cell_res",
+        "chunk_size",
+        # HAG window + ground/top modeling
+        "hag_min",
+        "hag_max",
+        "ground_method",
+        "top_method",
+        "top_zscore_cap",
+        "top_quantile_lr",
+        # Candidate extraction
+        "connectivity",
+        "min_area_cells",
+        "max_area_cells",
+        "refine_grid_pct",
+        "refine_size",
+        "se_radius_m",
+        "circularity_min",
+        "solidity_min",
+        "watershed",
+        "h_maxima",
+        "min_split_area_cells",
+        "border_trim_px",
+        "slope_max_deg",
+        # File selection / skipping behavior (affects which tiles are processed)
+        "exclude_dir",
+        "skip_copc",
+        "only_las",
+        "max_grid_mb",
+    }
+    return {k: params.get(k) for k in sorted(allow) if k in params}
 
 
 def _find_golden_cloud3() -> Optional[Path]:
@@ -85,7 +123,7 @@ def _stable_signature(summary: dict) -> str:
         )
 
     payload = {
-        "params": summary.get("params"),
+        "params": _stable_params(summary.get("params")),
         "total_count": int(summary.get("total_count", 0)),
         "files": files,
     }
@@ -148,6 +186,7 @@ class TestLiDARPipeline:
             "--min-area-cells", "2",
             "--max-area-cells", "80",
             "--emit-geojson",
+            "--crs-epsg", "32720",
             "--plots",
         ]
 
@@ -233,6 +272,7 @@ class TestLiDARPipeline:
         assert geojson["type"] == "FeatureCollection", "Invalid GeoJSON type"
         assert "features" in geojson, "Missing 'features' in GeoJSON"
         assert len(geojson["features"]) > 0, "No features in GeoJSON"
+        assert "metadata" in geojson, "Missing 'metadata' in GeoJSON"
 
     def test_plots_generated(self):
         """Verify QC plots were generated."""
