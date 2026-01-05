@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Environment Validation Script
 # Validates that the venv environment is properly set up and all dependencies work
 
-set -e  # Exit on any error
+set -euo pipefail
 
-echo "🧪 Penguin Pipeline Environment Validation"
+echo "Penguin Pipeline Environment Validation"
 echo "=========================================="
 echo ""
 
@@ -14,21 +14,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check Python 3.11+ is available
+# Check Python 3.12 is available
 echo "1. Checking Python availability..."
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}✗ python3 not found in PATH${NC}"
-    echo "  Install Python 3.11+ from: https://www.python.org/downloads/"
+PYTHON_BIN="${PYTHON_BIN:-python3.12}"
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo -e "${RED}✗ ${PYTHON_BIN} not found in PATH${NC}"
+    echo "  Install Python 3.12.x from: https://www.python.org/downloads/"
     exit 1
 else
-    echo -e "${GREEN}✓ python3 found: $(which python3)${NC}"
-    python3 --version
+    echo -e "${GREEN}✓ ${PYTHON_BIN} found: $(command -v "${PYTHON_BIN}")${NC}"
+    "${PYTHON_BIN}" --version
 
-    # Check version is 3.11+
-    py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    if [[ $(echo "$py_version < 3.11" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
-        echo -e "${YELLOW}⚠ Python $py_version detected (3.11+ recommended)${NC}"
-    fi
+    "${PYTHON_BIN}" -c 'import sys; v=sys.version_info; assert (v.major, v.minor)==(3,12), f"Expected Python 3.12.x, got {v.major}.{v.minor}"'
 fi
 echo ""
 
@@ -39,7 +36,7 @@ if [ -d ".venv" ]; then
 else
     echo -e "${YELLOW}⚠ Virtual environment '.venv' not found${NC}"
     echo "  Creating virtual environment..."
-    python3 -m venv .venv
+    "${PYTHON_BIN}" -m venv .venv
     echo -e "${GREEN}✓ Virtual environment created${NC}"
 fi
 echo ""
@@ -50,6 +47,7 @@ echo "  (Activating '.venv' environment)"
 
 # Source the venv
 source .venv/bin/activate
+python3 -c 'import sys; v=sys.version_info; assert (v.major, v.minor)==(3,12), f".venv is not Python 3.12.x (got {v.major}.{v.minor}). Remove .venv and rerun make env."'
 
 # Check if requirements installed
 if python3 -c "import laspy" 2>/dev/null; then
@@ -148,6 +146,7 @@ python3 scripts/run_lidar_hag.py \
     --cell-res 0.25 \
     --hag-min 0.2 --hag-max 0.6 \
     --min-area-cells 2 --max-area-cells 80 \
+    --strict-outputs \
     > /tmp/lidar_smoke.log 2>&1
 
 if [ $? -eq 0 ]; then
@@ -190,7 +189,7 @@ echo "=========================================="
 echo -e "${GREEN}✓ Environment validation complete!${NC}"
 echo ""
 echo "Virtual environment: .venv"
-echo "Python: $(python3 --version)"
+echo "Python: $(python3 --version) (venv)"
 echo ""
 echo "Next steps:"
 echo "  1. Activate environment: source .venv/bin/activate"

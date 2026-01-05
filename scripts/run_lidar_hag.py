@@ -8,7 +8,7 @@ Pipeline per file:
 - Detect penguin-like blobs: HAG within [hag_min, hag_max], small, compact regions
 - Count connected components / peaks; write per-file counts + summary JSON; optional PNGs
 
-Designed to avoid loading all points in memory; works on Python 3.13 without Open3D.
+Designed to avoid loading all points in memory; baseline Python is 3.12.x (tests may run on newer versions).
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import time
 
 # Add project src to path for consistency
 import sys
@@ -42,12 +41,14 @@ except Exception:
     MATPLOTLIB_AVAILABLE = False
 
 # Image processing
-from skimage import morphology, measure, filters
+from skimage import morphology, measure
 from skimage.segmentation import watershed
 from scipy import ndimage as ndi
-from scipy.ndimage import maximum_filter, percentile_filter
+from scipy.ndimage import percentile_filter
 from scipy.spatial import cKDTree
 from pipelines.utils.provenance import write_provenance, append_timings
+from pipelines.contracts import LIDAR_CANDIDATES_CONTRACT, LIDAR_CANDIDATES_PURPOSE
+from pipelines.lidar_profiles import as_policy_dict
 
 # LAS streaming
 try:
@@ -68,23 +69,27 @@ def find_lidar_files(root: Path) -> List[Path]:
         for fn in fns:
             if Path(fn).suffix.lower() in {".las", ".laz"}:
                 files.append(Path(dp) / fn)
-    # Prefer non-sample duplicates by filename; keep first seen otherwise.
-    sorted_files = sorted(files, key=lambda p: (_is_sample_path(p), str(p)))
+    # Avoid accidentally dropping real tiles that share a filename across directories.
+    # Only de-duplicate the special case where both a `sample/` version and a non-sample
+    # version exist for the same filename; prefer the non-sample path in that case.
+    files = sorted(files, key=str)
+    by_name: Dict[str, List[Path]] = {}
+    for path in files:
+        by_name.setdefault(path.name.lower(), []).append(path)
+
     filtered: List[Path] = []
-    seen_names: Dict[str, Path] = {}
-    for path in sorted_files:
-        key = path.name.lower()
-        prior = seen_names.get(key)
-        if prior is None:
-            filtered.append(path)
-            seen_names[key] = path
+    for group in by_name.values():
+        if len(group) == 1:
+            filtered.append(group[0])
             continue
-        # Only replace the prior path if it came from a 'sample' subdir and the new one does not.
-        if _is_sample_path(prior) and not _is_sample_path(path):
-            idx = filtered.index(prior)
-            filtered[idx] = path
-            seen_names[key] = path
-    return filtered
+        non_sample = [p for p in group if not _is_sample_path(p)]
+        sample = [p for p in group if _is_sample_path(p)]
+        if non_sample and sample:
+            filtered.extend(non_sample)
+        else:
+            # Either all are non-sample, or all are sample → keep them all.
+            filtered.extend(group)
+    return sorted(filtered, key=str)
 
 
 def _compute_bounds_stream(las_path: Path, chunk_size: int) -> Tuple[np.ndarray, np.ndarray, int]:
@@ -222,10 +227,174 @@ def _online_quantile_update_indexed(
     q_flat[uniq] = q_u
 
 
+def _crs_meta_from_args(crs_epsg: Optional[int], crs_wkt: Optional[str]) -> Optional[Dict[str, object]]:
+    if crs_epsg is None and not crs_wkt:
+        return None
+    meta: Dict[str, object] = {}
+    if crs_epsg is not None:
+        meta["epsg"] = int(crs_epsg)
+    if crs_wkt:
+        meta["wkt"] = str(crs_wkt)
+    return meta
+
+
+def _estimate_grid_bytes(
+    ny: int,
+    nx: int,
+    ground_method: str,
+    top_method: str,
+    slope_max_deg: Optional[float],
+) -> int:
+    n_cells = int(ny) * int(nx)
+    if n_cells <= 0:
+        return 0
+    bytes_per_cell = 0
+    bytes_per_cell += 4  # DEM
+    if ground_method.lower() != "min":
+        bytes_per_cell += 4  # q05
+    bytes_per_cell += 4  # HAG
+    if str(top_method).lower() == "p95":
+        bytes_per_cell += 4  # q95
+    bytes_per_cell += 4  # HAG copy for detection
+    if slope_max_deg is not None:
+        bytes_per_cell += 4  # slope
+    bytes_per_cell += 8  # labeled (int64 conservative)
+    bytes_per_cell += 1  # mask
+    bytes_per_cell += 4  # scratch buffers
+    return int(n_cells * bytes_per_cell)
+
+
+def _dedupe_detections(
+    detections: list[dict],
+    *,
+    radius_m: float,
+) -> tuple[list[dict], dict[str, dict]]:
+    """Return (deduped_detections, dedupe_index).
+
+    - `deduped_detections` contains one representative detection per cluster.
+    - `dedupe_index` maps original detection id -> {keep_id, cluster_id, dropped}.
+    """
+    if radius_m <= 0 or not detections:
+        return detections, {}
+
+    pts = np.array([(float(d["x"]), float(d["y"])) for d in detections], dtype=np.float64)
+    tree = cKDTree(pts)
+    neighbors = tree.query_ball_point(pts, r=float(radius_m))
+    parent = np.arange(pts.shape[0])
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i, nbrs in enumerate(neighbors):
+        for j in nbrs:
+            if j <= i:
+                continue
+            union(i, j)
+
+    # Bucket members by root (cluster).
+    clusters: dict[int, list[int]] = {}
+    for i in range(pts.shape[0]):
+        clusters.setdefault(int(find(i)), []).append(i)
+
+    # Choose a deterministic representative for each cluster.
+    rep_by_root: dict[int, int] = {}
+    for root, members in clusters.items():
+        rep = min(
+            members,
+            key=lambda idx: (
+                str(detections[idx].get("file") or ""),
+                str(detections[idx].get("id") or ""),
+                float(detections[idx].get("x")),
+                float(detections[idx].get("y")),
+            ),
+        )
+        rep_by_root[root] = rep
+
+    dedupe_index: dict[str, dict] = {}
+    deduped: list[dict] = []
+    for root, rep_idx in rep_by_root.items():
+        rep_det = dict(detections[rep_idx])
+        rep_det["dedupe_cluster_id"] = int(root)
+        rep_det["dedupe_cluster_size"] = int(len(clusters[root]))
+        deduped.append(rep_det)
+
+    # Stable output order.
+    deduped.sort(key=lambda d: (str(d.get("file") or ""), str(d.get("id") or "")))
+
+    for root, members in clusters.items():
+        keep_idx = rep_by_root[root]
+        keep_id = str(detections[keep_idx].get("id") or "")
+        for idx in members:
+            det_id = str(detections[idx].get("id") or "")
+            if not det_id:
+                continue
+            dedupe_index[det_id] = {
+                "keep_id": keep_id,
+                "cluster_id": int(root),
+                "dropped": bool(idx != keep_idx),
+            }
+
+    return deduped, dedupe_index
+
+
+def _write_geojson(
+    dets: List[Dict],
+    out_path: Path,
+    crs_meta: Optional[Dict[str, object]],
+    coord_units: str,
+    transformer: Optional[object] = None,
+    source_crs: Optional[Dict[str, object]] = None,
+) -> Optional[str]:
+    try:
+        feats = []
+        for d in dets:
+            if "x" not in d or "y" not in d:
+                continue
+            x = float(d["x"])
+            y = float(d["y"])
+            if transformer is not None:
+                try:
+                    x, y = transformer.transform(x, y)
+                except Exception as e:
+                    return f"GeoJSON coordinate transform failed: {e}"
+            feats.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [x, y]},
+                "properties": {k: v for k, v in d.items() if k not in ("x", "y")},
+            })
+        fc = {
+            "type": "FeatureCollection",
+            "features": feats,
+            "metadata": {"crs": crs_meta, "coord_units": coord_units},
+        }
+        if source_crs is not None and source_crs != crs_meta:
+            fc["metadata"]["source_crs"] = source_crs
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(fc, f)
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: bool,
                      ground_method: str = "min",
-                     quantile_lr: float = 0.05) -> Tuple[np.ndarray, Dict]:
-    mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
+                     quantile_lr: float = 0.05,
+                     bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None) -> Tuple[np.ndarray, Dict]:
+    if bounds is None:
+        mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
+    else:
+        mins, maxs = bounds
+        mins = np.array(mins, dtype=float)
+        maxs = np.array(maxs, dtype=float)
     ny, nx = _grid_shape(mins, maxs, cell_res)
     dem = np.full((ny, nx), np.inf, dtype=np.float32)
     # For percentile ground: maintain online q05 per cell
@@ -284,7 +453,8 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
 
 def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
                    top_method: str = "max",
-                   top_zscore_cap: Optional[float] = None) -> np.ndarray:
+                   top_zscore_cap: Optional[float] = None,
+                   top_quantile_lr: float = 0.05) -> np.ndarray:
     mins = np.array(meta["mins"], dtype=float)
     cell_res = float(meta["cell_res"])
     ny, nx = dem.shape
@@ -304,7 +474,7 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
         if flat.size:
             if use_p95:
                 q95_flat = q95.ravel()  # type: ignore[arg-type]
-                _online_quantile_update_indexed(q95_flat, flat, hag_chunk, p=0.95, lr=0.05)
+                _online_quantile_update_indexed(q95_flat, flat, hag_chunk, p=0.95, lr=top_quantile_lr)
             else:
                 hag_flat = hag.ravel()
                 np.maximum.at(hag_flat, flat, hag_chunk)
@@ -334,7 +504,6 @@ def detect_penguins_from_hag(hag: np.ndarray,
                              slope_max_deg: Optional[float] = None,
                              cell_res: Optional[float] = None,
                              mins: Optional[np.ndarray] = None,
-                             emit_geojson_path: Optional[Path] = None,
                              refine_grid_pct: Optional[float] = None,
                              refine_size: int = 3,
                              se_radius_m: float = 0.15,
@@ -399,17 +568,18 @@ def detect_penguins_from_hag(hag: np.ndarray,
                 unique_ws = np.unique(ws[ws_mask])
                 label_map = {int(l): int(i + current_max + 1) for i, l in enumerate(unique_ws)}
                 current_max += len(unique_ws)
+                patch = new_labeled[minr:maxr, minc:maxc]
                 # Clear the original region
-                new_labeled[minr:maxr, minc:maxc][submask] = 0
+                patch[submask] = 0
                 # Write new labels
                 mapped = np.zeros_like(ws, dtype=int)
                 for l, gid in label_map.items():
                     mapped[ws == l] = gid
-                patch = new_labeled[minr:maxr, minc:maxc]
                 patch[ws_mask] = mapped[ws_mask]
             labeled = new_labeled
     count = 0
     dets: List[Dict] = []
+    accepted_labels: set[int] = set()
     props = measure.regionprops(labeled, intensity_image=hag)
     for region in props:
         area = region.area
@@ -443,7 +613,8 @@ def detect_penguins_from_hag(hag: np.ndarray,
             if slope[sy, sx] > slope_max_deg:
                 continue
         count += 1
-        det: Dict = {"row": float(region.centroid[0]), "col": float(region.centroid[1]),
+        accepted_labels.add(int(region.label))
+        det: Dict = {"label": int(region.label), "row": float(region.centroid[0]), "col": float(region.centroid[1]),
                      "area_cells": int(area), "circularity": circularity, "solidity": solidity,
                      "hag_mean": float(region.mean_intensity), "hag_max": float(region.max_intensity)}
         # Map coordinates if available
@@ -452,19 +623,13 @@ def detect_penguins_from_hag(hag: np.ndarray,
             y = float(mins[1] + (det["row"] + 0.5) * cell_res)
             det.update({"x": x, "y": y, "area_m2": float(area) * (cell_res ** 2)})
         dets.append(det)
-    # Optional GeoJSON write
-    if emit_geojson_path is not None and dets:
-        try:
-            feats = [{"type": "Feature",
-                      "geometry": {"type": "Point", "coordinates": [d.get("x"), d.get("y")]},
-                      "properties": {k: v for k, v in d.items() if k not in ("x", "y")}}
-                     for d in dets if "x" in d and "y" in d]
-            fc = {"type": "FeatureCollection", "features": feats}
-            emit_geojson_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(emit_geojson_path, "w") as f:
-                json.dump(fc, f)
-        except Exception:
-            pass
+    # Keep only accepted regions in the label image so QC plots match the returned detections/count.
+    if accepted_labels:
+        keep = np.zeros(int(labeled.max()) + 1, dtype=bool)
+        keep[list(accepted_labels)] = True
+        labeled = np.where(keep[labeled], labeled, 0)
+    else:
+        labeled = np.zeros_like(labeled)
     return count, labeled, dets
 
 
@@ -570,6 +735,7 @@ def process_file(las_path: Path,
                  ground_method: str = "min",
                  top_method: str = "p95",
                  top_zscore_cap: Optional[float] = None,
+                 top_quantile_lr: float = 0.05,
                  refine_grid_pct: Optional[float] = None,
                  refine_size: int = 3,
                  se_radius_m: float = 0.15,
@@ -581,12 +747,52 @@ def process_file(las_path: Path,
                  h_maxima_h: float = 0.05,
                  min_split_area_cells: int = 12,
                  connectivity: int = 2,
-                 emit_geojson_path: Optional[Path] = None) -> Dict:
+                 emit_geojson_path: Optional[Path] = None,
+                 geojson_crs: Optional[Dict[str, object]] = None,
+                 geojson_coord_units: str = "meters",
+                 geojson_wgs84: bool = False,
+                 strict_outputs: bool = False,
+                 max_grid_mb: Optional[float] = None,
+                 skip_oversized_tiles: bool = False) -> Dict:
     if verbose:
         print(f"Processing {las_path.name} ...", flush=True)
     import time as _t
     t0 = _t.time()
-    dem, meta = build_ground_dem(las_path, cell_res, chunk_size, verbose, ground_method=ground_method)
+    try:
+        mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
+    except Exception as e:
+        msg = f"Failed to read bounds for {las_path.name}: {e}"
+        print(f"WARNING: {msg}", file=sys.stderr)
+        return {"path": str(las_path), "count": 0, "error": msg}
+    ny, nx = _grid_shape(mins, maxs, cell_res)
+    if max_grid_mb is not None:
+        est_bytes = _estimate_grid_bytes(ny, nx, ground_method, top_method, slope_max_deg)
+        est_mb = est_bytes / (1024 ** 2)
+        if est_mb > float(max_grid_mb):
+            msg = (
+                f"Tile grid too large: estimated {est_mb:.1f} MB exceeds max-grid-mb {float(max_grid_mb):.1f} MB."
+            )
+            if skip_oversized_tiles:
+                print(f"WARNING: Skipping {las_path.name}: {msg}", file=sys.stderr)
+                return {
+                    "path": str(las_path),
+                    "count": 0,
+                    "skipped": True,
+                    "error": msg,
+                    "grid_shape": [int(ny), int(nx)],
+                    "cell_res": cell_res,
+                    "hag_min": hag_min,
+                    "hag_max": hag_max,
+                }
+            raise RuntimeError(f"{las_path.name}: {msg}")
+    dem, meta = build_ground_dem(
+        las_path,
+        cell_res,
+        chunk_size,
+        verbose,
+        ground_method=ground_method,
+        bounds=(mins, maxs),
+    )
     hag = build_hag_grid(
         las_path,
         dem,
@@ -594,6 +800,7 @@ def process_file(las_path: Path,
         chunk_size,
         top_method=top_method,
         top_zscore_cap=top_zscore_cap,
+        top_quantile_lr=top_quantile_lr,
     )
     # Optional slope (degrees) from ground surface for terrain gating
     slope_arr: Optional[np.ndarray] = None
@@ -606,7 +813,6 @@ def process_file(las_path: Path,
         smooth_sigma=0.0, connectivity=connectivity,
         slope=slope_arr, slope_max_deg=slope_max_deg,
         cell_res=cell_res, mins=np.array(meta["mins"]),
-        emit_geojson_path=emit_geojson_path,
         refine_grid_pct=refine_grid_pct,
         refine_size=refine_size,
         se_radius_m=se_radius_m,
@@ -618,6 +824,13 @@ def process_file(las_path: Path,
         border_trim_px=border_trim_px,
     )
     dt = _t.time() - t0
+
+    # Stable ordering + stable IDs (per-tile) for downstream joins and reproducibility.
+    dets.sort(key=lambda d: (float(d.get("x", 0.0)), float(d.get("y", 0.0)), int(d.get("area_cells", 0))))
+    for i, d in enumerate(dets, start=1):
+        d.setdefault("tile", las_path.stem)
+        d.setdefault("id", f"{las_path.stem}:{i:05d}")
+        d.setdefault("file", str(las_path))
     info = {
         "path": str(las_path),
         "count": int(count),
@@ -628,6 +841,50 @@ def process_file(las_path: Path,
         "hag_max": hag_max,
         "detections": dets,
     }
+    if emit_geojson_path is not None and dets:
+        out_crs = geojson_crs
+        coord_units = geojson_coord_units
+        transformer = None
+        source_crs = None
+        if geojson_wgs84:
+            if geojson_crs is None:
+                msg = "GeoJSON WGS84 output requested but CRS not provided; writing projected coordinates."
+                print(f"WARNING: {msg}", file=sys.stderr)
+                info["geojson_transform_error"] = msg
+            else:
+                try:
+                    import pyproj
+                    if "wkt" in geojson_crs:
+                        crs_in = pyproj.CRS.from_wkt(str(geojson_crs["wkt"]))
+                    elif "epsg" in geojson_crs:
+                        crs_in = pyproj.CRS.from_epsg(int(geojson_crs["epsg"]))
+                    else:
+                        crs_in = pyproj.CRS.from_user_input(geojson_crs)
+                    transformer = pyproj.Transformer.from_crs(
+                        crs_in, pyproj.CRS.from_epsg(4326), always_xy=True
+                    )
+                    out_crs = {"epsg": 4326}
+                    coord_units = "degrees"
+                    source_crs = geojson_crs
+                except Exception as e:
+                    msg = f"GeoJSON WGS84 transform unavailable: {e}. Writing projected coordinates."
+                    print(f"WARNING: {msg}", file=sys.stderr)
+                    info["geojson_transform_error"] = msg
+        geojson_error = _write_geojson(
+            dets,
+            emit_geojson_path,
+            out_crs,
+            coord_units,
+            transformer=transformer,
+            source_crs=source_crs,
+        )
+        if geojson_error:
+            print(f"WARNING: GeoJSON write failed for {emit_geojson_path}: {geojson_error}", file=sys.stderr)
+            info["geojson_error"] = geojson_error
+            if strict_outputs:
+                raise RuntimeError(f"GeoJSON write failed for {emit_geojson_path}: {geojson_error}")
+        else:
+            info["geojson"] = str(emit_geojson_path)
     if plots_dir is not None:
         # Save HAG-only first (use global fixed color bounds if available via closure)
         png_before = plots_dir / f"{las_path.stem}_hag.png"
@@ -660,15 +917,49 @@ def main() -> None:
     parser.add_argument("--ground-method", default="min", choices=["min","p05"], help="Ground DEM estimator per cell")
     parser.add_argument("--top-method", default="p95", choices=["max","p95"], help="Top surface estimator per cell (currently informational)")
     parser.add_argument("--top-zscore-cap", type=float, default=3.0, help="Z-score cap for top outliers")
+    parser.add_argument("--top-quantile-lr", type=float, default=0.05, help="Learning rate for online p95 quantile")
     parser.add_argument("--connectivity", type=int, default=2, choices=[1,2], help="Connectivity for labeling (2 = 8-connected)")
     parser.add_argument("--emit-geojson", action="store_true", help="Write detections GeoJSON per tile")
+    parser.add_argument("--crs-epsg", type=int, default=None, help="EPSG code for input XY CRS (projected)")
+    parser.add_argument("--crs-wkt", default=None, help="WKT string for input XY CRS")
+    parser.add_argument("--geojson-wgs84", action="store_true", help="Transform GeoJSON output to EPSG:4326 (requires CRS)")
+    parser.add_argument(
+        "--emit-gpkg",
+        action="store_true",
+        help="Write a GeoPackage with all detections in the input CRS (requires CRS + geopandas stack).",
+    )
+    parser.add_argument(
+        "--gpkg-path",
+        default=None,
+        help="Optional GeoPackage output path (default: <out_dir>/lidar_hag_detections.gpkg)",
+    )
+    parser.add_argument(
+        "--allow-unknown-crs",
+        action="store_true",
+        help="Allow GeoJSON output without CRS metadata (not recommended).",
+    )
     parser.add_argument("--min-area-cells", type=int, default=2, help="Min region size in cells")
     parser.add_argument("--max-area-cells", type=int, default=80, help="Max region size in cells")
     parser.add_argument("--chunk-size", type=int, default=1000000, help="LAS chunk size for streaming")
     parser.add_argument("--plots", action="store_true", help="Save HAG map + detections PNG")
+    parser.add_argument("--plots-global-scale", action="store_true", help="Use a global color scale across tiles")
+    parser.add_argument("--plot-sample-n", type=int, default=20, help="Sample N tiles for global scale")
+    parser.add_argument("--plot-vmax", type=float, default=None, help="Fixed vmax for global plot scaling")
     parser.add_argument("--emit-csv", action="store_true", help="Also write aggregated detections CSV alongside JSON summary")
     parser.add_argument("--csv-path", default=None, help="Optional CSV output path (default: results/lidar_hag_detections.csv)")
     parser.add_argument("--verbose", action="store_true", help="Verbose progress")
+    parser.add_argument(
+        "--max-grid-mb",
+        type=float,
+        default=512.0,
+        help="Fail (or skip with --skip-oversized-tiles) when a tile exceeds this grid memory estimate (MiB)",
+    )
+    parser.add_argument(
+        "--skip-oversized-tiles",
+        action="store_true",
+        help="Skip tiles exceeding --max-grid-mb instead of failing the run (not recommended for final counts).",
+    )
+    parser.add_argument("--strict-outputs", action="store_true", help="Fail fast on GeoJSON/CSV output errors")
     # File selection filters
     parser.add_argument("--exclude-dir", action="append", default=[], help="Exclude any files within directories with this name (repeatable)")
     parser.add_argument("--skip-copc", action="store_true", help="Skip *.copc.laz files (COPC) when both COPC and LAS exist")
@@ -687,6 +978,10 @@ def main() -> None:
     parser.add_argument("--dedupe-radius-m", type=float, default=None, help="If set, de-duplicate detections across tiles within this radius (meters)")
 
     args = parser.parse_args()
+    if args.hag_min >= args.hag_max:
+        raise SystemExit("hag_min must be < hag_max")
+    if args.min_area_cells >= args.max_area_cells:
+        raise SystemExit("min_area_cells must be < max_area_cells")
 
     data_root = Path(args.data_root).resolve()
     out_path = Path(args.out).resolve()
@@ -712,44 +1007,91 @@ def main() -> None:
     if det_geojson_dir is not None:
         det_geojson_dir.mkdir(parents=True, exist_ok=True)
 
+    crs_meta = _crs_meta_from_args(args.crs_epsg, args.crs_wkt)
+    coord_units = "meters"
+    if args.emit_geojson or args.emit_gpkg:
+        if args.geojson_wgs84 and crs_meta is None:
+            raise SystemExit("--geojson-wgs84 requires --crs-epsg or --crs-wkt.")
+        if crs_meta is None and not args.allow_unknown_crs:
+            raise SystemExit(
+                "--emit-geojson requires CRS metadata. Provide --crs-epsg/--crs-wkt or pass --allow-unknown-crs."
+            )
+        if args.emit_gpkg and crs_meta is None:
+            raise SystemExit("--emit-gpkg requires --crs-epsg or --crs-wkt.")
+        if crs_meta is None and args.allow_unknown_crs:
+            print(
+                "WARNING: CRS not provided; GeoJSON coordinates are projected meters with unknown CRS.",
+                file=sys.stderr,
+            )
+
     summary = {
         "schema_version": "1",
-        "purpose": "lidar_candidates",
-        # CRS is not reliably available from LAS headers across sources; leave explicit null unless
-        # upstream orchestration injects a known CRS.
-        "crs": None,
+        "purpose": LIDAR_CANDIDATES_PURPOSE,
+        "contract": LIDAR_CANDIDATES_CONTRACT,
+        "policy": as_policy_dict(),
+        "crs": crs_meta,
+        "coord_units": coord_units,
         "data_root": str(data_root),
-        "params": {
-            "cell_res": args.cell_res,
-            "hag_min": args.hag_min,
-            "hag_max": args.hag_max,
-            "min_area_cells": args.min_area_cells,
-            "max_area_cells": args.max_area_cells,
-            "chunk_size": args.chunk_size,
-        },
+        "params": vars(args).copy(),
         "files": [],
         "total_count": 0,
     }
 
     # Optional: compute global color bounds for consistent plotting across tiles
-    global_vmin: Optional[float] = 0.0
+    global_vmin: Optional[float] = None
     global_vmax: Optional[float] = None
-    if plots_dir is not None:
-        vmax_samples: List[float] = []
-        for f_tmp in files:
-            try:
-                dem_tmp, meta_tmp = build_ground_dem(f_tmp, args.cell_res, args.chunk_size, verbose=False)
-                hag_tmp = build_hag_grid(f_tmp, dem_tmp, meta_tmp, args.chunk_size)
-                if np.isfinite(hag_tmp).any():
-                    vmax_samples.append(float(np.nanpercentile(hag_tmp, 99)))
-            except Exception:
-                continue
-        if vmax_samples:
-            global_vmax = max(float(np.median(vmax_samples)), float(args.hag_max))
+    use_global_scale = bool(args.plots_global_scale or args.plot_vmax is not None)
+    if plots_dir is not None and use_global_scale:
+        global_vmin = 0.0
+        if args.plot_vmax is not None:
+            global_vmax = float(args.plot_vmax)
         else:
-            global_vmax = float(args.hag_max)
+            vmax_samples: List[float] = []
+            sample_n = int(args.plot_sample_n)
+            if sample_n <= 0 or len(files) <= sample_n:
+                sample_files = files
+            else:
+                idxs = np.linspace(0, len(files) - 1, sample_n, dtype=int)
+                sample_files = [files[i] for i in idxs]
+            for f_tmp in sample_files:
+                try:
+                    mins_tmp, maxs_tmp, _ = read_bounds_and_counts(f_tmp, args.chunk_size)
+                    ny_tmp, nx_tmp = _grid_shape(mins_tmp, maxs_tmp, args.cell_res)
+                    if args.max_grid_mb is not None:
+                        est_bytes = _estimate_grid_bytes(
+                            ny_tmp, nx_tmp, args.ground_method, args.top_method, args.slope_max_deg
+                        )
+                        est_mb = est_bytes / (1024 ** 2)
+                        if est_mb > float(args.max_grid_mb):
+                            print(
+                                f"WARNING: Skipping plot scale prepass for {f_tmp.name} "
+                                f"(estimated {est_mb:.1f} MB > max-grid-mb {float(args.max_grid_mb):.1f}).",
+                                file=sys.stderr,
+                            )
+                            continue
+                    dem_tmp, meta_tmp = build_ground_dem(
+                        f_tmp, args.cell_res, args.chunk_size, verbose=False, ground_method=args.ground_method,
+                        bounds=(mins_tmp, maxs_tmp),
+                    )
+                    hag_tmp = build_hag_grid(
+                        f_tmp,
+                        dem_tmp,
+                        meta_tmp,
+                        args.chunk_size,
+                        top_method=args.top_method,
+                        top_zscore_cap=args.top_zscore_cap,
+                        top_quantile_lr=args.top_quantile_lr,
+                    )
+                    if np.isfinite(hag_tmp).any():
+                        vmax_samples.append(float(np.nanpercentile(hag_tmp, 99)))
+                except Exception:
+                    continue
+            if vmax_samples:
+                global_vmax = max(float(np.median(vmax_samples)), float(args.hag_max))
+            else:
+                global_vmax = float(args.hag_max)
 
-    all_xy: list[tuple[float, float]] = []
+    all_detections: list[dict] = []
     for f in files:
         geojson_path = None
         if det_geojson_dir is not None:
@@ -769,6 +1111,7 @@ def main() -> None:
             ground_method=args.ground_method,
             top_method=args.top_method,
             top_zscore_cap=args.top_zscore_cap,
+            top_quantile_lr=args.top_quantile_lr,
             refine_grid_pct=args.refine_grid_pct,
             refine_size=args.refine_size,
             se_radius_m=args.se_radius_m,
@@ -781,40 +1124,130 @@ def main() -> None:
             slope_max_deg=args.slope_max_deg,
             connectivity=args.connectivity,
             emit_geojson_path=geojson_path,
+            geojson_crs=crs_meta,
+            geojson_coord_units=coord_units,
+            geojson_wgs84=args.geojson_wgs84,
+            strict_outputs=args.strict_outputs,
+            max_grid_mb=args.max_grid_mb,
+            skip_oversized_tiles=args.skip_oversized_tiles,
         )
         summary["files"].append(info)
         summary["total_count"] += int(info.get("count", 0))
-        # Collect centroids if present
+        # Collect detection records for optional batch-level de-duplication
         for d in info.get("detections", []) or []:
-            if "x" in d and "y" in d:
-                all_xy.append((float(d["x"]), float(d["y"])) )
+            if "x" in d and "y" in d and d.get("id"):
+                all_detections.append(d)
 
-    # Cross-tile de-duplication
-    if args.dedupe_radius_m and all_xy:
-        pts = np.array(all_xy, dtype=np.float64)
-        tree = cKDTree(pts)
-        neighbors = tree.query_ball_point(pts, r=float(args.dedupe_radius_m))
-        parent = np.arange(pts.shape[0])
-
-        def find(a: int) -> int:
-            while parent[a] != a:
-                parent[a] = parent[parent[a]]
-                a = parent[a]
-            return a
-
-        def union(a: int, b: int) -> None:
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                parent[rb] = ra
-
-        for i, nbrs in enumerate(neighbors):
-            for j in nbrs:
-                if j <= i:
-                    continue
-                union(i, j)
-        clusters = {int(find(i)) for i in range(pts.shape[0])}
+    # Cross-tile de-duplication (batch artifact + count)
+    deduped: list[dict] | None = None
+    dedupe_index: dict[str, dict] | None = None
+    if args.dedupe_radius_m and all_detections:
+        deduped, dedupe_index = _dedupe_detections(all_detections, radius_m=float(args.dedupe_radius_m))
         summary["dedupe_radius_m"] = float(args.dedupe_radius_m)
-        summary["total_count_deduped"] = int(len(clusters))
+        summary["total_count_deduped"] = int(len(deduped))
+
+        dedup_csv_path = out_path.parent / "lidar_hag_detections_deduped.csv"
+        dedup_json_path = out_path.parent / "lidar_hag_detections_deduped.json"
+        summary["dedupe_outputs"] = {"csv": str(dedup_csv_path), "json": str(dedup_json_path)}
+
+        try:
+            import csv as _csv
+
+            fieldnames = [
+                "id",
+                "tile",
+                "file",
+                "x",
+                "y",
+                "area_m2",
+                "area_cells",
+                "hag_mean",
+                "hag_max",
+                "circularity",
+                "solidity",
+                "dedupe_cluster_id",
+                "dedupe_cluster_size",
+            ]
+            with open(dedup_csv_path, "w", newline="") as cf:
+                w = _csv.DictWriter(cf, fieldnames=fieldnames)
+                w.writeheader()
+                for d in deduped:
+                    w.writerow({k: d.get(k) for k in fieldnames})
+        except Exception as e:
+            msg = str(e)
+            print(f"WARNING: deduped CSV write failed: {msg}", file=sys.stderr)
+            summary["dedupe_csv_error"] = msg
+            if args.strict_outputs:
+                raise
+
+        try:
+            payload = {
+                "schema_version": "1",
+                "purpose": "lidar_candidates_deduped",
+                "contract": {
+                    **LIDAR_CANDIDATES_CONTRACT,
+                    "purpose": "lidar_candidates_deduped",
+                    "semantic_unit": "candidate_deduped",
+                    "notes": (
+                        "De-duplication is centroid-distance clustering across the batch. "
+                        "This reduces obvious cross-tile duplicates but is not an individual-count model."
+                    ),
+                },
+                "crs": crs_meta,
+                "coord_units": coord_units,
+                "dedupe_radius_m": float(args.dedupe_radius_m),
+                "total_count_deduped": int(len(deduped)),
+                "detections": deduped,
+                "dedupe_index": dedupe_index,
+            }
+            dedup_json_path.write_text(json.dumps(payload, indent=2))
+        except Exception as e:
+            msg = str(e)
+            print(f"WARNING: deduped JSON write failed: {msg}", file=sys.stderr)
+            summary["dedupe_json_error"] = msg
+            if args.strict_outputs:
+                raise
+
+    # Optional GeoPackage output (projection-preserving GIS delivery)
+    if args.emit_gpkg:
+        gpkg_path = Path(args.gpkg_path) if args.gpkg_path else (out_path.parent / "lidar_hag_detections.gpkg")
+        summary["gpkg"] = {"path": str(gpkg_path)}
+        try:
+            import geopandas as gpd  # type: ignore[import-not-found]
+
+            if crs_meta is None:
+                raise RuntimeError("Missing CRS metadata")
+
+            if "epsg" in crs_meta and crs_meta["epsg"] is not None:
+                crs = f"EPSG:{int(crs_meta['epsg'])}"
+            elif "wkt" in crs_meta and crs_meta["wkt"]:
+                crs = str(crs_meta["wkt"])
+            else:
+                raise RuntimeError("CRS metadata missing epsg/wkt")
+
+            def to_gdf(rows: list[dict]) -> "gpd.GeoDataFrame":
+                df = gpd.GeoDataFrame(rows)
+                df["geometry"] = gpd.points_from_xy(df["x"].astype(float), df["y"].astype(float))
+                df = df.set_crs(crs)
+                return df
+
+            # Write full detections layer.
+            if all_detections:
+                gdf = to_gdf(all_detections)
+                gdf.to_file(gpkg_path, layer="detections", driver="GPKG")
+                summary["gpkg"]["layers"] = ["detections"]
+
+            # Write deduped layer if available.
+            if deduped:
+                gdf_d = to_gdf(deduped)
+                gdf_d.to_file(gpkg_path, layer="detections_deduped", driver="GPKG")
+                summary["gpkg"].setdefault("layers", []).append("detections_deduped")
+        except Exception as e:
+            msg = str(e)
+            print(f"WARNING: GeoPackage write failed: {msg}", file=sys.stderr)
+            summary["gpkg_error"] = msg
+            if args.strict_outputs:
+                raise
 
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
@@ -828,8 +1261,8 @@ def main() -> None:
                 # Use the per-tile LAS path for provenance (key is 'path' in process_file output)
                 src = fi.get("path")
                 for d in fi.get("detections", []) or []:
-                    row = {"file": src}
-                    row.update({k: d.get(k) for k in ("x","y","area_m2","hag_mean","hag_max","circularity","solidity")})
+                    row = {"file": src, "tile": d.get("tile"), "id": d.get("id")}
+                    row.update({k: d.get(k) for k in ("x","y","area_m2","hag_mean","hag_max","circularity","solidity","area_cells")})
                     rows.append(row)
             if rows:
                 csv_path = Path(args.csv_path) if args.csv_path else (out_path.parent / "lidar_hag_detections.csv")
@@ -837,16 +1270,21 @@ def main() -> None:
                     writer = _csv.DictWriter(cf, fieldnames=list(rows[0].keys()))
                     writer.writeheader()
                     writer.writerows(rows)
-        except Exception:
-            pass
+        except Exception as e:
+            msg = str(e)
+            print(f"WARNING: CSV write failed: {msg}", file=sys.stderr)
+            summary["csv_error"] = msg
+            if args.strict_outputs:
+                raise
 
     print(json.dumps({"files": len(summary["files"]), "total_count": summary["total_count"]}, indent=2))
     # Write provenance with timing and params
     total_time_s = float(sum((fi.get("time_s", 0.0) for fi in summary["files"])) )
     write_provenance(out_path.parent, filename="provenance_lidar.json", extra={
-        "script": "lidar_detect_penguins.py",
+        "script": "scripts/run_lidar_hag.py",
         "data_root": str(data_root),
         "params": summary["params"],
+        "cli_args": vars(args),
         "timings": {
             "total_seconds": round(total_time_s, 3),
             "avg_seconds_per_file": round(total_time_s / max(1, len(summary["files"])), 3)

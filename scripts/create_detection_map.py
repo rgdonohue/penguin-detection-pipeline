@@ -61,19 +61,41 @@ def create_detection_map(
     # Load detections
     data = load_geojson(geojson_path)
     features = data.get("features", [])
+    metadata = data.get("metadata") or {}
 
     if not features:
         print(f"No features found in {geojson_path}")
         return
 
-    # Create transformer from UTM to WGS84 (lat/lon)
-    transformer = Transformer.from_crs(source_crs, "EPSG:4326", always_xy=True)
+    # Prefer CRS embedded by the producer (if present).
+    inferred_epsg: Optional[int] = None
+    if isinstance(metadata, dict):
+        crs_meta = metadata.get("crs")
+        if isinstance(crs_meta, dict) and "epsg" in crs_meta and crs_meta["epsg"] is not None:
+            try:
+                inferred_epsg = int(crs_meta["epsg"])
+            except Exception:
+                inferred_epsg = None
+        # If the file says coordinates are degrees, treat as WGS84.
+        if inferred_epsg is None and metadata.get("coord_units") == "degrees":
+            inferred_epsg = 4326
+
+    effective_source_crs = f"EPSG:{inferred_epsg}" if inferred_epsg is not None else source_crs
+    already_wgs84 = effective_source_crs.upper() in {"EPSG:4326", "WGS84"}
+
+    # Create transformer to WGS84 (lat/lon) only when needed.
+    transformer = None if already_wgs84 else Transformer.from_crs(effective_source_crs, "EPSG:4326", always_xy=True)
 
     # Transform all coordinates to lat/lon
     transformed_features = []
     for f in features:
-        utm_x, utm_y = f["geometry"]["coordinates"]
-        lon, lat = transformer.transform(utm_x, utm_y)
+        x, y = f["geometry"]["coordinates"]
+        if transformer is None:
+            lon, lat = float(x), float(y)
+            utm_x, utm_y = None, None
+        else:
+            utm_x, utm_y = float(x), float(y)
+            lon, lat = transformer.transform(utm_x, utm_y)
         transformed_features.append({
             "lon": lon,
             "lat": lat,
@@ -177,7 +199,7 @@ def create_detection_map(
             <b>Circularity:</b> {props.get('circularity', 0):.2f}<br>
             <b>Solidity:</b> {props.get('solidity', 0):.2f}<br>
             <hr style="margin: 5px 0;">
-            <b>UTM:</b> {utm_x:.1f} E, {utm_y:.1f} N<br>
+            <b>XY:</b> {'' if utm_x is None else f'{utm_x:.1f} E, {utm_y:.1f} N'}<br>
             <b>WGS84:</b> {lat:.6f}, {lon:.6f}
         </div>
         """
@@ -275,7 +297,7 @@ def main():
         "--source-crs",
         type=str,
         default="EPSG:32720",
-        help="Source CRS for GeoJSON coordinates (default: EPSG:32720)",
+        help="Override source CRS for GeoJSON coordinates (metadata is used when present)",
     )
     parser.add_argument(
         "--mapbox-token",
