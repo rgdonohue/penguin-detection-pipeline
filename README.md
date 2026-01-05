@@ -1,10 +1,16 @@
 # Penguin Detection Pipeline
 
-**LiDAR-thermal fusion system for automated penguin detection in drone survey data.**
+**LiDAR (+ optional thermal) pipeline for estimating penguin presence from drone survey data.**
 
 Version 0.2 | Last Updated: 2025-12-11
 
 ---
+
+## For Scientists (What to Expect)
+
+- **What you get**: maps + a per-file JSON summary of **candidate detections** (points/blobs), plus QC plots.
+- **What it means**: a “detection” is a *candidate* (not a confirmed individual) until validated with AOI clipping + spot-check labeling.
+- **What’s solid today**: LiDAR detection is deterministic enough for regression/QC; thermal extraction works but calibration is unresolved.
 
 ## Quick Start
 
@@ -12,7 +18,8 @@ Version 0.2 | Last Updated: 2025-12-11
 
 ```bash
 # 1. Clone repository
-cd /Users/richard/Documents/projects/penguins-4.0
+git clone https://github.com/rgdonohue/penguin-detection-pipeline.git
+cd penguin-detection-pipeline
 
 # 2. Set up environment
 make env
@@ -46,16 +53,17 @@ python scripts/run_lidar_hag.py \
 - Processes LiDAR point clouds to detect penguin-sized objects (0.2-0.6m HAG)
 - Uses Height-Above-Ground analysis with morphological filtering
 - Outputs: GeoJSON, JSON summaries, QC plots, interactive web maps
-- **Proven accuracy:** 802 detections on golden AOI, reproducible across runs
+- **Regression baseline:** 802 **candidate** detections on the golden AOI (used as a guardrail; not an accuracy claim)
 
 **Thermal Processing (Research Phase ⚠️)**
 - Extracts 16-bit radiometric temperature data from DJI RJPEG format
 - Orthorectifies thermal imagery using camera model
 - Status: Infrastructure validated; ~9°C calibration offset unresolved
 
-**Fusion Pipeline (Not Yet Implemented ❌)**
-- Spatial join of LiDAR and thermal detections
-- Classification: Both / LiDAR-only / Thermal-only
+**Fusion (QC Alignment; Partial ⚠️)**
+- Spatial join of LiDAR and thermal detections (nearest-neighbor within a radius)
+- Produces labels: Both / LiDAR-only / Thermal-only
+- **Important**: fusion assumes both inputs already contain projected CRS `x/y` coordinates (meters). Thermal pixel→CRS georeferencing is not implemented here yet.
 
 ## Ground Truth Data
 
@@ -108,7 +116,7 @@ pip install -r requirements.txt
 
 Thermal processing requires GDAL. See `requirements-full.txt` for detailed installation instructions.
 
-**Quick path (conda):**
+**Quick path (conda, optional — only if you need thermal):**
 ```bash
 conda create -n penguins-thermal python=3.12
 conda activate penguins-thermal
@@ -170,6 +178,14 @@ open data/interim/lidar_hag_plots/
 # 4. Load GeoJSON in QGIS for validation
 qgis data/interim/lidar_hag_geojson/cloud3_detections.geojson
 ```
+
+---
+
+## Interpreting Outputs (Scientist-Friendly)
+
+- **`*_detections.json`**: candidate detections + summary counts. Treat counts as *candidates* unless you’ve validated against a known AOI.
+- **GeoJSON/GPKG**: points/polygons you can load into QGIS to visually confirm alignment and plausible densities.
+- **QC plots**: quick visual checks that detections are landing on penguin-like objects (and not rocks, vegetation, or artifacts).
 
 ---
 
@@ -418,7 +434,7 @@ See [AI_POLICY.md](AI_POLICY.md) for AI collaboration guidelines.
 ## Current Status (As of 2025-12-11)
 
 **Production Ready:**
-- ✅ LiDAR detection pipeline (802 detections on golden AOI, reproducible)
+- ✅ LiDAR detection pipeline (802 **candidate** detections on golden AOI; reproducible as a regression baseline)
 - ✅ Automated testing (12 tests passing)
 - ✅ Interactive web maps (Folium)
 - ✅ Provenance tracking
@@ -431,8 +447,9 @@ See [AI_POLICY.md](AI_POLICY.md) for AI collaboration guidelines.
 - ⚠️ Thermal detection (~9°C calibration offset unresolved)
 - ⚠️ Ground truth georeferencing (GPS → pixel coordinates)
 
-**Not Implemented:**
-- ❌ Fusion pipeline (spatial join of LiDAR + thermal)
+**Not Implemented (End-to-End):**
+- ❌ Thermal pixel→CRS georeferencing needed for end-to-end fusion on real thermal detections
+- ⚠️ Fusion join exists for already-georeferenced thermal detections (requires CRS `x/y`)
 
 See [CLAUDE.md](CLAUDE.md) for detailed project context and current priorities.
 
