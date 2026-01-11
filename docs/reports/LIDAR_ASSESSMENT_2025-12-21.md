@@ -34,14 +34,16 @@ Until these are resolved, count comparisons are indicative but not scientificall
 
 ## Detection Results (Raw, Pre-AOI-Clip)
 
-### San Lorenzo Full (using `--gnd-method max`)
+### San Lorenzo Full (deterministic run; outputs in EPSG:5345)
 
 | Metric | Value |
 |--------|-------|
 | Total detections (deduped) | 18,932 |
 | Processing time | ~85 seconds |
-| Detections in Caves AOI | 128 (vs 908 field count) |
-| Detections in Plains AOI | 221 (vs 453 field count) |
+| Detections in Caves AOI | 263 (vs 908 field count) |
+| Detections in Plains AOI | 86 (vs 453 field count) |
+
+**Source (AOI-clipped eval):** `data/processed/san_lorenzo_aoi_eval.json` using AOIs in `data/processed/aoi_san_lorenzo_epsg5345.geojson`.
 
 ### Caleta Small Island (using `--gnd-method max`)
 

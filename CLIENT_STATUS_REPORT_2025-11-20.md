@@ -2,6 +2,8 @@
 ## Status Report - November 20, 2025
 
 > Update (2025-12-17): The golden AOI baseline was **rebased to 802 detections** after fixing an order-dependent quantile bug in the LiDAR DEM/HAG implementation; `pytest` is now green (tests restricted to `tests/`), and a basic fusion spatial join exists in `pipelines/fusion.py` (requires CRS `x/y` inputs).
+>
+> Update (2026-01-11): Argentina 2025 LiDAR is now catalogued and processed; San Lorenzo outputs are in **EPSG:5345** (native POSGAR), Caleta outputs are **EPSG:32720**. AOI-clipped evaluation exists for **2 AOIs** (San Lorenzo caves/plains) and interactive HTML QC panels exist under `qc/panels/`.
 
 ### Executive Summary
 
@@ -21,7 +23,7 @@ LiDAR detection is production-ready on our golden test data and has been stable 
 - Processing speed: ~5 GB/minute on test Mac M-series laptop (4.4 GB tile in 51 seconds; throughput depends on hardware/I/O)
 
 **Performance Metrics:**
-- **879 candidate detections** on the golden tile (4.4 GB sample), reproducible across runs with fixed parameters
+- **802 candidate detections** on the golden tile (4.4 GB sample), reproducible across runs with fixed parameters
 - **12/12 automated tests passing** (last run: Nov 5, 2025)
 
 **Outputs Provided:**
@@ -40,7 +42,7 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
 ### 2. Thermal Imaging - **RESEARCH PHASE** ⚠️
 
 **What It Does:**
-- Extracts radiometric temperature data from DJI H20T imagery (H30T untested)
+- Extracts radiometric temperature data from DJI H20T imagery (H30T supported; calibration still unresolved for counting)
 - Can show warm spots for manual review; not reliable for automated counts
 - Serves as supplementary context to LiDAR detections
 
@@ -69,9 +71,13 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
   - **Thermal-Only** - Heat detected, no 3D shape
 
 **Current Status:**
-- No spatial join code exists
-- No fusion script written
-- Timeline uncertain given thermal research status
+✅ Basic spatial join exists (QC / geometry alignment only):
+- `pipelines/fusion.py` (KD-tree nearest-neighbor join)
+- `scripts/run_fusion_join.py` (CLI wrapper)
+
+⚠️ Not production-ready:
+- Requires both inputs already contain projected CRS `x/y` in the **same** CRS (thermal georeferencing is not provided here)
+- Thermal detection is still research-only due to calibration + ground truth gaps
 
 ---
 
@@ -91,7 +97,7 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
 ### What We Can Do Today
 
 ✅ **Process LiDAR data now**
-- Expected output: Colony-wide candidate count (879 baseline on test tile)
+- Expected output: Colony-wide candidate count (802 baseline on test tile)
 - Processing estimate: ~10–15 minutes for 35 GB on similar hardware; actual time depends on TrueView density/I/O
 - Confidence: High on tested data; will verify on your sample tile
 - **Note:** TrueView 515 LiDAR untested; parameters may need adjustment
@@ -160,7 +166,7 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
 
 **Supported Inputs:**
 - LiDAR: LAS/LAZ files (tested at 8,700-9,000 pts/m²; other densities may need tuning)
-- Thermal: DJI H20T radiometric imagery (H30T untested)
+- Thermal: DJI H20T/H30T radiometric imagery (extraction supported; calibration still unresolved for counting)
 - Coordinates: Tested with UTM Zone 20S; other projected systems should work if consistent across inputs
 
 **System Requirements:**
@@ -202,7 +208,7 @@ python scripts/run_lidar_hag.py --data-root <your_lidar_folder> --out results.js
 **Test Data:** H20T thermal in `data/legacy_ro/penguin-thermal-og/`
 **LiDAR Test:** `data/legacy_ro/penguin-2.0/data/raw/LiDAR/`
 
-*This pipeline represents 4 iterations of development, incorporating lessons from previous field deployments and validated against 879 candidate detections on the golden test tile.*
+*This pipeline represents 4 iterations of development, incorporating lessons from previous field deployments and validated against 802 candidate detections on the golden test tile.*
 
 ---
 
