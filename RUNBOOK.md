@@ -186,6 +186,37 @@ python scripts/evaluate_lidar_aoi.py \
   --out data/interim/lidar_aoi_eval.json
 ```
 
+### 1e. Derive Island AOI from LiDAR Footprint (Caleta-style)
+
+When the counted region is a closed natural boundary (e.g., an island), you can derive an AOI polygon directly from LiDAR coverage in the same projected CRS.
+
+```bash
+source .venv/bin/activate
+
+PYTHONPATH=. python scripts/extract_lidar_island_aoi.py \
+  --data-root "data/2025/Caleta Small Island" \
+  --out data/processed/aoi_caleta_small_island_epsg32720.geojson \
+  --crs-epsg 32720 \
+  --aoi-id caleta_small_island \
+  --threshold-method fixed \
+  --min-points-per-cell 1 \
+  --cell-res-m 1.0
+```
+
+If the LiDAR folder includes nearby mainland and you only want the island component, pass a detections summary to select the connected component nearest those detections:
+
+```bash
+PYTHONPATH=. python scripts/extract_lidar_island_aoi.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/processed/aoi_caleta_tiny_island_epsg32720.geojson \
+  --crs-epsg 32720 \
+  --aoi-id caleta_tiny_island \
+  --threshold-method otsu \
+  --roi-from-detections data/interim/tiny_best.json \
+  --roi-buffer-m 60 \
+  --cell-res-m 1.0
+```
+
 If you want the exact detections included in each AOI (can be large):
 
 ```bash
@@ -290,6 +321,42 @@ python3 scripts/run_lidar_hag.py \
 - Location: `data/2025/lidar_catalogue_full.json`
 - Total: 24 files, 754M points, 25.8 GB
 - Session report: `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md`
+
+---
+
+## AOI + Coverage Web Map (2025)
+
+Generate the AOI catalogue and LiDAR coverage layers, then build the interactive map:
+
+```bash
+source .venv/bin/activate
+
+# 1) AOI catalogue (WGS84 with confidence metadata)
+python scripts/create_aoi_catalogue.py \
+  --output data/processed/aoi_catalogue_wgs84.geojson
+
+# 2) LiDAR coverage extents + thermal targets (WGS84)
+# Extract LiDAR coverage extents (bounding boxes - fast)
+PYTHONPATH=. python scripts/extract_lidar_coverage.py \
+  --data-root data/2025 \
+  --output data/processed/lidar_coverage_wgs84.geojson \
+  --include-thermal
+
+# Extract LiDAR coverage outlines (actual data footprint - slower but more accurate)
+PYTHONPATH=. python scripts/extract_lidar_coverage.py \
+  --data-root data/2025 \
+  --output data/processed/lidar_coverage_wgs84.geojson \
+  --outline-mode outline \
+  --cell-res 2.0 \
+  --simplify-tol 5.0 \
+  --include-thermal
+
+# 3) Build the web map
+python scripts/create_argentina_map.py \
+  --lidar-coverage data/processed/lidar_coverage_wgs84.geojson \
+  --aoi-catalogue data/processed/aoi_catalogue_wgs84.geojson \
+  --output qc/panels/argentina_aoi_overview.html
+```
 
 ---
 
