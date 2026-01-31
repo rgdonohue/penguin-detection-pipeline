@@ -172,6 +172,87 @@ For “official/defensible” runs where strict reproducibility matters, prefer 
 
 Reference policy constants: `pipelines/lidar_profiles.py` (`OFFICIAL_DETERMINISTIC`).
 
+### 1b2. CRS Audit
+
+Audit embedded CRS metadata across all LAS files:
+
+```bash
+source .venv/bin/activate
+
+python scripts/audit_crs.py --data-root data/2025/ --json-out data/processed/crs_audit.json
+```
+
+### 1b3. LiDAR with Intensity Extraction
+
+Extract per-cell mean intensity grid and enrich detections with intensity features:
+
+```bash
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/caleta_tiny_intensity.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --crs-epsg 32720 \
+  --extract-intensity --verbose
+```
+
+### 1b4. LiDAR with Confidence Scoring
+
+Add per-detection confidence scores:
+
+```bash
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/caleta_tiny_scored.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --crs-epsg 32720 \
+  --compute-confidence --verbose
+```
+
+### 1b5. Parameter Sensitivity Sweep
+
+Run parameter sweep on a single tile:
+
+```bash
+python scripts/lidar_parameter_sweep.py \
+  --las-file data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample/cloud3.las \
+  --out-dir qc/panels/parameter_sensitivity \
+  --verbose
+```
+
+### 1b6. Intensity Analysis
+
+Plot intensity distributions across sites:
+
+```bash
+python scripts/analyze_lidar_intensity.py \
+  --inputs data/interim/caleta_tiny_intensity.json data/interim/caleta_small_intensity.json \
+  --labels "Caleta Tiny" "Caleta Small" \
+  --out-dir qc/panels/intensity_analysis
+```
+
+### 1b7. San Lorenzo AOI Generation
+
+Regenerate San Lorenzo AOIs (includes Bushes box):
+
+```bash
+python scripts/create_san_lorenzo_aois.py \
+  --output data/processed/aoi_san_lorenzo_epsg5345.geojson
+```
+
+### 1b8. Precision Estimation
+
+Estimate precision from labeled samples:
+
+```bash
+python scripts/estimate_precision.py \
+  --label-csvs data/interim/lidar_label_samples/bushes_box/label_sample.csv \
+  --site-labels "Bushes Box" \
+  --candidate-counts 45 \
+  --out data/processed/precision_estimates.json
+```
+
 ### 1c. AOI-Clipped Evaluation (QC / Alignment)
 
 Compute counts/densities inside AOI polygons (GeoJSON FeatureCollection). AOIs must be in the **same CRS** as the LiDAR detections (typically projected meters).

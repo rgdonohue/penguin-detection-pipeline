@@ -94,12 +94,16 @@ We track progress in two parallel lanes:
 ## ✅ QC / Engineering Milestones (do now; testable without new imagery)
 
 ### E1. Explicit Schemas + CRS Contracts
-**Status:** ⏳ IN PROGRESS
+**Status:** ✅ MOSTLY COMPLETE (2026-01-30)
 
-- [ ] Define versioned summary JSON schema for LiDAR / thermal / fusion
-- [ ] Ensure every CRS-space detection output includes `crs` (e.g. `EPSG:32720`)
-- [ ] Enforce CRS mismatch rejection (fusion already rejects mismatches)
-- [ ] Add a lightweight contract/integration test that validates schema keys and determinism
+- [x] CRS auto-detection from LAS headers (run_lidar_hag.py)
+- [x] CRS mismatch warning between CLI arg and auto-detected CRS
+- [x] `crs_source` field in summary JSON (cli vs autodetect)
+- [x] `aoi_from_lidar.py` requires explicit CRS (removed hardcoded default)
+- [x] CRS audit script (`scripts/audit_crs.py`)
+- [x] CRS unit tests (`tests/test_crs_autodetect.py` — 13 tests)
+- [ ] Define versioned summary JSON schema for thermal / fusion
+- [x] Enforce CRS mismatch rejection (fusion already rejects mismatches)
 
 ### E2. Thermal Pixel→CRS Scaffolding (for orthorectified outputs)
 **Status:** ❌ NOT STARTED
@@ -120,6 +124,28 @@ We track progress in two parallel lanes:
 
 - [x] `pipelines/golden.py` runs the golden AOI guardrail (`tests/test_golden_aoi.py`) as a QC harness
 - [x] `make golden` added as the supported entrypoint for the guardrail
+
+### E5. LiDAR Deep Dive (2026-01-30)
+**Status:** ✅ IMPLEMENTED
+
+- [x] CRS auto-detection + audit script (Phase 1)
+- [x] San Lorenzo AOI fix: Plains perimeter winding, Bushes box addition (Phase 2)
+- [x] AOI clarification memo in LIDAR_VALIDATION.md (Phase 2)
+- [x] Intensity feature extraction: `--extract-intensity` flag, per-cell grid, per-detection features (Phase 3)
+- [x] Intensity analysis script: `scripts/analyze_lidar_intensity.py` (Phase 3)
+- [x] Parameter sweep framework: `scripts/lidar_parameter_sweep.py` with 1D+2D sweeps (Phase 4)
+- [x] Confidence scoring: `--compute-confidence` flag, Gaussian membership scores (Phase 4)
+- [x] Precision estimation: `scripts/estimate_precision.py` with Wilson CI (Phase 5)
+- [x] Labeling protocol: `docs/process/LABELING_PROTOCOL.md` (Phase 5)
+- [x] Detection rate summary: `docs/reports/DETECTION_RATE_SUMMARY.md` (Phase 6)
+- [x] Client assessment: `docs/reports/LIDAR_ASSESSMENT_2026-01.md` (Phase 6)
+
+**Remaining (requires data/labeling):**
+- [ ] Run intensity-enriched pipeline on Caleta Tiny, Bushes box, Caleta Small
+- [ ] Run parameter sweep on Caleta Tiny
+- [ ] Label 80+ detection samples per site
+- [ ] Compute precision estimates from labels
+- [ ] Generate per-site detection maps with confidence coloring
 
 ---
 
@@ -264,14 +290,15 @@ Argentina data currently provides **region totals** (~3,705 counts), not per-pen
 
 | Category | Complete | Total | Percentage |
 |----------|----------|-------|------------|
-| LiDAR Pipeline | 6 | 7 | 86% |
+| LiDAR Pipeline | 7 | 7 | 100% |
+| LiDAR Deep Dive | 11 | 16 | 69% |
 | Thermal Pipeline | 5 | 9 | 56% |
 | Fusion Pipeline | 3 | 6 | 50% |
 | Ground Truth (legacy) | 3 | 7 | 43% |
 | Ground Truth (Argentina) | 2 | 4 | 50% |
-| Documentation | 3 | 4 | 75% |
+| Documentation | 4 | 4 | 100% |
 
-**Overall:** ~55% complete (camera model fix + fusion spatial join completed)
+**Overall:** ~60% complete (LiDAR deep dive implemented, pending data runs and labeling)
 
 ---
 
@@ -289,6 +316,7 @@ Argentina data currently provides **region totals** (~3,705 counts), not per-pen
 
 ## 🔄 Update Log
 
+- **2026-01-30:** LiDAR deep dive: CRS auto-detection, AOI fixes, intensity extraction, parameter sweep, confidence scoring, precision estimation framework, client deliverables
 - **2025-12-17 (PM):** Camera model fix (A3) implemented — proper Euler ZYX sequence, gimbal angles ABSOLUTE to NED, det(R)=+1 verified, all 41 tests passing
 - **2025-12-17:** Major refresh — accurate task status, clarified ground truth (48 waypoints vs 3,705 count), documented test failures, updated blocker matrix
 - **2025-11-05:** Consolidated from PLAN.md, NEXT_STEPS.md, and Codex feedback
