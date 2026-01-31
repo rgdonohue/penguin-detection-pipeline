@@ -623,23 +623,39 @@ def rotation_from_ypr(
         [0, s_phi,  c_phi],
     ], dtype=float)
 
-    # Compose: R_ned = Rz @ Ry @ Rx (intrinsic ZYX)
-    R_ned = Rz @ Ry @ Rx
+    # Compose: R_body_to_ned = Rz @ Ry @ Rx (intrinsic ZYX)
+    # This maps BODY frame vectors to NED world vectors.
+    # At zero angles, body frame IS NED: body-x=North, body-y=East, body-z=Down.
+    R_body_to_ned = Rz @ Ry @ Rx
+
+    # Camera→body axis permutation.
+    # Camera axes: x=right, y=down, z=forward (optical axis)
+    # Body axes at zero angles (horizontal, facing North in NED):
+    #   body-x = North = camera-z (forward)
+    #   body-y = East  = camera-x (right)
+    #   body-z = Down  = camera-y (down)
+    # So v_body = C @ v_cam:
+    C_cam_to_body = np.array([
+        [0, 0, 1],  # body-x (North) = cam-z (forward)
+        [1, 0, 0],  # body-y (East)  = cam-x (right)
+        [0, 1, 0],  # body-z (Down)  = cam-y (down)
+    ], dtype=float)
+
+    # Full camera→NED: first permute camera axes to body, then rotate body to NED
+    R_cam_to_ned = R_body_to_ned @ C_cam_to_body
 
     if frame.upper() == "ENU":
         # Convert from NED to ENU
         # NED: (North, East, Down) → ENU: (East, North, Up)
-        # Transformation: E=N_ned, N=E_ned, U=-D_ned
         # M transforms vectors: v_enu = M @ v_ned
         M_ned_to_enu = np.array([
-            [0, 1,  0],  # ENU-East = NED-East
+            [0, 1,  0],  # ENU-East  = NED-East
             [1, 0,  0],  # ENU-North = NED-North
-            [0, 0, -1],  # ENU-Up = -NED-Down
+            [0, 0, -1],  # ENU-Up    = -NED-Down
         ], dtype=float)
-        # Transform rotation: R_enu = M @ R_ned @ M^T
-        R = M_ned_to_enu @ R_ned @ M_ned_to_enu.T
+        R = M_ned_to_enu @ R_cam_to_ned
     else:
-        R = R_ned
+        R = R_cam_to_ned
 
     return R
 
