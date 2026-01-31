@@ -1,86 +1,117 @@
 # Penguin Detection Pipeline
 
-This pipeline estimates penguin presence from drone survey data, supporting population monitoring of Magellanic penguin colonies in Patagonia. It processes LiDAR point clouds to detect penguin-sized objects by height above ground, with optional thermal imagery fusion for validation. The system is designed for field researchers conducting aerial surveys with DJI drones equipped with LiDAR (L2, TrueView 515) and thermal (H30T, H20T) sensors.
+Automated detection of Magellanic penguins from drone survey data, developed in collaboration with the [Conservation Technology Alliance](https://www.conservationta.org/). The pipeline processes LiDAR point clouds and thermal imagery collected by drone to identify and count penguins across breeding colonies in Patagonia, Argentina.
 
-Outputs are candidate detections (blob centroids), not confirmed individuals. Validation against ground truth requires AOI clipping and spot-check labeling, which is not yet automated.
+## Project Goal
 
-## Quick Start
+Manual counting of penguin colonies is labor-intensive and limited in scale. This project develops a reproducible, sensor-fusion approach to estimate penguin populations from aerial surveys. The pipeline identifies penguin-sized objects in LiDAR height data, extracts thermal signatures from infrared imagery, and combines both sources for validated counts. The aim is a field-deployable tool that conservation teams can run on standard survey data to produce population estimates with documented precision.
 
-```bash
-git clone https://github.com/rgdonohue/penguin-detection-pipeline.git
-cd penguin-detection-pipeline
-make env && source .venv/bin/activate
-make validate
+## Study Sites (Argentina 2025)
 
-# Process LiDAR tiles
-python scripts/run_lidar_hag.py \
-    --data-root data/intake/lidar/ \
-    --out results/detections.json \
-    --emit-geojson --plots
-```
+Field data was collected across San Lorenzo and Caleta sites in Patagonia during 2025, covering approximately 3,705 penguins with densities ranging from 15 to 1,518 penguins per hectare.
 
-Outputs appear in `results/`: JSON summaries, GeoJSON spatial layers, and PNG plots for visual QC.
+| Site | Field Count | Area (ha) | Density (/ha) | Sensors |
+|------|------------|-----------|---------------|---------|
+| San Lorenzo Caves | 908 | 0.60 | 1,518 | TrueView 515, H30T |
+| San Lorenzo Plains | 453 | 0.98 | 464 | TrueView 515, H30T |
+| San Lorenzo Road | 359 | — | — | TrueView 515, H30T |
+| San Lorenzo Box Counts | 87 | 4.95 | 15–28 | H30T |
+| Caleta Small Island | 1,557 | 4.0 | 389 | DJI L2, H30T |
+| Caleta Tiny Island | 321 | 0.7 | 459 | DJI L2, H30T |
+| Caleta Box Counts | 20 | — | — | H30T |
+
+Surveys used DJI drones with LiDAR sensors (DJI L2, TrueView 515) and thermal cameras (DJI H30T). Field counts were recorded by ground teams walking transects and counting penguins within marked boundaries.
 
 ## How It Works
 
-The pipeline has three stages, currently at different levels of maturity.
+The pipeline has three stages.
 
-**LiDAR detection** computes height above ground (HAG) for each point, rasterizes to a 0.25m grid, and extracts connected components within the 0.2-0.6m height band. Morphological filters remove objects outside the expected penguin size range (0.125-5 m²). This stage is deterministic and regression-tested against a golden AOI baseline.
+**LiDAR Detection.** Point clouds are normalized to height above ground (HAG), rasterized to a 0.25 m grid, and filtered to the 0.2–0.6 m height band (the expected standing height of Magellanic penguins). Connected-component analysis extracts blob candidates, and morphological filters remove objects outside the 0.125–5.0 m² size range. This stage is deterministic — the same input always produces the same output — and is regression-tested against a baseline dataset.
 
-**Thermal processing** extracts 16-bit radiometric temperatures from DJI RJPEG files and orthorectifies frames using camera pose metadata. The camera model applies DJI's NED gimbal conventions with proper Euler ZYX rotation. This stage works mechanically but has an unresolved calibration offset (~9°C) that prevents reliable biological detection.
+**Thermal Processing.** Full 16-bit radiometric temperatures are extracted from DJI thermal JPEG files. Frames are orthorectified (projected onto terrain) using camera pose metadata and a digital surface model. This stage is functional but has an unresolved temperature calibration offset that prevents reliable biological detection thresholds.
 
-**Fusion** performs a spatial join between LiDAR and thermal detections using a KD-tree nearest-neighbor search within a configurable radius. It labels each detection as LiDAR-only, thermal-only, or both. This stage requires both inputs to already have projected CRS coordinates; thermal pixel-to-CRS georeferencing is not yet implemented.
+**Fusion.** LiDAR and thermal detections are spatially joined using nearest-neighbor matching. Each detection is labeled as LiDAR-only, thermal-only, or confirmed by both sensors. This stage is partially implemented; full integration depends on resolving thermal georeferencing.
 
-## Key Scripts
+## Results So Far
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/run_lidar_hag.py` | LiDAR HAG detection with GeoJSON/CSV/GPKG output |
-| `scripts/run_thermal_ortho.py` | Thermal orthorectification (requires GDAL) |
-| `scripts/run_fusion_join.py` | Spatial join of LiDAR and thermal detections |
-| `scripts/create_detection_map.py` | Interactive Folium web maps |
+LiDAR detection has been validated against field counts at four sites. Results are expressed as candidate-to-field-count ratios — the proportion of field-counted penguins that the pipeline produces candidate detections for within a defined area of interest (AOI).
 
-Core logic lives in `pipelines/`: `lidar.py`, `thermal.py`, `fusion.py`.
+| Site | Field Count | LiDAR Candidates | Ratio | AOI Source |
+|------|------------|-------------------|-------|------------|
+| Caleta Tiny Island | 321 | 315 | 0.98 | LiDAR footprint |
+| Caleta Small Island | 1,557 | 1,255 | 0.81 | LiDAR footprint |
+| San Lorenzo Caves | 908 | 263 | 0.29 | GPS waypoints (approximate) |
+| San Lorenzo Plains | 453 | 86 | 0.19 | GPS waypoints (approximate) |
+
+**Interpreting these numbers:** The Caleta island results are the most reliable because the AOI boundaries come directly from LiDAR coverage of isolated islands with natural coastline boundaries. The San Lorenzo ratios are lower primarily because the AOI polygons were approximated from GPS waypoint notes and may not match the actual areas that field teams counted. Additionally, many San Lorenzo penguins nest in caves and burrows where they are not visible to LiDAR.
+
+These are candidate counts, not confirmed penguin identifications. Precision estimation (what fraction of candidates are actually penguins) requires manual spot-checking, which is underway.
 
 ## Current Status
 
-| Stage | Status | Notes |
-|-------|--------|-------|
-| LiDAR detection | Production | 802-candidate baseline on golden AOI; 59 tests passing |
-| Thermal extraction | Research | 16-bit radiometric works; calibration offset unresolved |
-| Fusion | Partial | Spatial join works; blocked on thermal georeferencing |
-| Ground truth | In progress | Argentina 2025: ~3,705 field counts; GPS-to-pixel projection pending |
+| Component | Status | Summary |
+|-----------|--------|---------|
+| LiDAR detection | Production | Deterministic pipeline with regression tests; validated on Argentina data |
+| AOI evaluation | Production | Tools for clipping detections to survey boundaries and computing site-level counts |
+| Thermal extraction | Research | Radiometric data extraction works; temperature calibration unresolved |
+| Thermal-LiDAR fusion | Partial | Spatial join implemented; blocked on thermal georeferencing |
+| Ground truth | In progress | ~3,705 field counts available; AOI boundary confirmation needed from field team |
 
-Detection counts are not yet validated against AOI-clipped ground truth. The 802 baseline is a regression guardrail, not an accuracy claim.
+### What's Needed Next
 
-## Documentation
+1. **AOI boundary confirmation** — The field team needs to provide or confirm digitized polygon boundaries for San Lorenzo sites. Current AOIs are approximated from GPS waypoint notes and show area mismatches with reported survey areas.
+2. **Precision estimation** — Manual labeling of 50–100 candidate detections within a validated AOI to quantify what fraction are true penguins vs. rocks or vegetation.
+3. **Thermal calibration** — Resolving the temperature offset to enable thermal-based detection and sensor fusion.
+4. **Box count validation** — Running LiDAR detection on the smaller box count areas (San Lorenzo: 32 and 55 penguins; Caleta: 8 and 12 penguins) where ground truth boundaries are more precise.
+
+## Outputs
+
+The pipeline produces several output types, stored in `data/processed/` and `qc/panels/`:
+
+- **Detection summaries** (JSON) — Per-site candidate counts with coordinates, heights, and areas
+- **Spatial layers** (GeoJSON, GeoPackage) — Candidate locations and AOI polygons in UTM Zone 20S (EPSG:32720) for use in GIS software
+- **Interactive maps** (HTML) — Folium web maps with candidate markers and AOI overlays, viewable in any browser
+- **Static maps** (PNG) — Publication-ready detection maps with processing metadata and provenance embedded
+- **QC reports** — Validation summaries comparing candidate counts to field counts by site
+
+## Project Structure
+
+```
+penguins-4.0/
+├── scripts/               # Command-line tools for each pipeline stage
+├── pipelines/             # Core detection and analysis modules
+├── tests/                 # Automated regression and validation tests
+├── data/
+│   ├── 2025/              # Argentina field survey data (LiDAR + thermal)
+│   ├── interim/           # Intermediate processing artifacts
+│   └── processed/         # Final outputs (GeoJSON, CSV, JSON)
+├── docs/                  # Planning, status reports, research notes
+├── qc/panels/             # Quality control maps and visualizations
+├── manifests/             # Data provenance tracking (SHA256 checksums)
+└── verification_images/   # Manual ground truth annotations
+```
+
+## Technical Setup
+
+Requires Python 3.12. LiDAR processing uses laspy, scipy, and scikit-image. Thermal processing additionally requires GDAL, rasterio, and pyproj.
+
+```bash
+make env && source .venv/bin/activate   # Create environment
+make golden                             # Run LiDAR regression test
+pytest tests/                           # Run full test suite
+```
+
+Hardware: 16 GB RAM minimum (32 GB recommended for large LiDAR files), 50 GB free disk per survey site.
+
+## Key References
 
 | Document | Purpose |
 |----------|---------|
-| [RUNBOOK.md](RUNBOOK.md) | Tested commands only |
-| [docs/reports/STATUS.md](docs/reports/STATUS.md) | Current implementation state |
+| [RUNBOOK.md](RUNBOOK.md) | Tested pipeline commands |
+| [docs/reports/STATUS.md](docs/reports/STATUS.md) | Detailed implementation state |
+| [docs/reports/LIDAR_VALIDATION.md](docs/reports/LIDAR_VALIDATION.md) | AOI-clipped validation results |
 | [docs/supplementary/FIELD_SOP.md](docs/supplementary/FIELD_SOP.md) | Field deployment procedures |
-| [PRD.md](PRD.md) | Product requirements |
-| [CLAUDE.md](CLAUDE.md) | AI assistant context and project conventions |
-
-## Requirements
-
-Python 3.12 with dependencies in `requirements.txt`. LiDAR processing uses laspy, scipy, and scikit-image. Thermal processing additionally requires GDAL, rasterio, and pyproj; install via conda or see `requirements-full.txt`.
-
-Hardware: 16GB RAM minimum (32GB recommended), 50GB free disk per survey site.
-
-## Testing
-
-```bash
-make golden          # Fast guardrail (802 detections on cloud3.las)
-make test-lidar      # Full LiDAR test suite
-pytest tests/        # All 59 tests (some skip without GDAL/fixtures)
-```
-
-## Ground Truth
-
-Argentina 2025 field collection covers ~3,705 penguins across San Lorenzo and Caleta sites, with densities ranging from 15 to 1,518 penguins per hectare. GPS waypoints are in `data/processed/san_lorenzo_waypoints.csv`. These are regional totals from field counts, not per-penguin pixel locations; georeferencing to image coordinates is pending.
 
 ## License
 
-Internal project. Contact project owner for usage permissions.
+Internal project. Contact the project owner for usage permissions.

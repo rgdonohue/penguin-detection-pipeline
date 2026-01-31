@@ -66,6 +66,7 @@ tmp/
 
 # AI assistants
 .claude/
+.gemini-clipboard/
 
 # Build artifacts
 build/
