@@ -144,33 +144,40 @@ def build_caves_polygon(waypoints: dict) -> dict:
 def build_plains_polygon(waypoints: dict) -> dict:
     """Build the Plains polygon from top and bottom edge waypoints.
 
-    The waypoints were recorded while walking transects, not in perimeter order.
-    Some bottom_edge points are duplicates or outliers. Using convex hull
-    produces a clean polygon that encloses all survey points.
+    Uses perimeter-winding approach: sort top edge west-to-east, sort bottom
+    edge east-to-west, concatenate to form a closed ring. This avoids the
+    self-intersecting bowtie that naive concatenation produces and gives a
+    more faithful representation than convex hull for concave survey areas.
     """
-    all_points = []
-    for point_type in ["top_edge", "bottom_edge", "start", "end"]:
-        if point_type in waypoints:
-            all_points.extend(waypoints[point_type])
+    top_edge = waypoints.get("top_edge", [])
+    bottom_edge = waypoints.get("bottom_edge", [])
 
-    if len(all_points) < 3:
+    if not top_edge or not bottom_edge:
         return None
 
-    # Remove duplicate points (within ~1m tolerance)
-    unique_points = []
-    for pt in all_points:
-        is_dup = False
-        for existing in unique_points:
-            # ~0.00001 degrees ≈ 1m
-            if abs(pt[0] - existing[0]) < 0.00001 and abs(pt[1] - existing[1]) < 0.00001:
-                is_dup = True
-                break
-        if not is_dup:
-            unique_points.append(pt)
+    # De-duplicate within ~1m tolerance
+    def dedup(pts: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        unique: List[Tuple[float, float]] = []
+        for pt in pts:
+            if not any(abs(pt[0] - e[0]) < 0.00001 and abs(pt[1] - e[1]) < 0.00001 for e in unique):
+                unique.append(pt)
+        return unique
 
-    # Use convex hull to create clean boundary
-    hull = convex_hull(unique_points)
-    coords_proj = points_to_projected(hull)
+    top_edge = dedup(top_edge)
+    bottom_edge = dedup(bottom_edge)
+
+    # Sort top edge west-to-east (ascending longitude)
+    top_sorted = sorted(top_edge, key=lambda p: p[1])
+    # Sort bottom edge east-to-west (descending longitude) to trace back
+    bottom_sorted = sorted(bottom_edge, key=lambda p: p[1], reverse=True)
+
+    # Form perimeter: top edge forward, then bottom edge backward
+    perimeter = top_sorted + bottom_sorted
+
+    if len(perimeter) < 3:
+        return None
+
+    coords_proj = points_to_projected(perimeter)
 
     # Close the polygon
     if coords_proj[0] != coords_proj[-1]:
@@ -187,9 +194,60 @@ def build_plains_polygon(waypoints: dict) -> dict:
             "name": "The Plains",
             "penguin_count": 453,
             "area_ha": round(area_m2 / 10000, 4),
-            "density_per_ha": round(453 / (area_m2 / 10000), 2),
-            "notes": "Convex hull of top/bottom edge waypoints",
+            "density_per_ha": round(453 / max(area_m2 / 10000, 0.0001), 2),
+            "notes": "Perimeter winding: top edge W→E + bottom edge E→W",
             "source": "GPS Ground Truthing Notes 2025 - RD.pdf"
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [coords_proj]
+        }
+    }
+
+
+def build_bushes_box_polygon() -> dict:
+    """Build the Bushes box count polygon from confirmed GPS corners.
+
+    GPS corners from the PDF (GPS Ground Truthing Notes 2025 - RD.pdf, p.4):
+    "Box Count High Density Bushes: 55 Counted Penguins"
+
+    NOTE: diagnostic_coordinate_mismatch.py confirmed these coordinates fall
+    inside the 11.9 (Caves) LiDAR tile, not the 11.10 (Bushes) tile. This
+    is either a mislabeling in the PDF or the coords are internal waypoints.
+    We include them as-is with a caveat; client clarification requested.
+    """
+    # WGS84 corners: (lat, lon) — ordered as a closed ring
+    corners_wgs84 = [
+        (-42.085258, -63.867123),  # NW (Top-Left)
+        (-42.085273, -63.866958),  # NE (Top-Right)
+        (-42.085392, -63.866972),  # SE (Bottom-Right)
+        (-42.085381, -63.867161),  # SW (Bottom-Left)
+    ]
+
+    coords_proj = points_to_projected(corners_wgs84)
+
+    # Close the polygon
+    if coords_proj[0] != coords_proj[-1]:
+        coords_proj.append(coords_proj[0])
+
+    area_m2 = compute_polygon_area(coords_proj)
+
+    return {
+        "type": "Feature",
+        "properties": {
+            "aoi_id": "san_lorenzo_bushes_box",
+            "site": "san_lorenzo",
+            "zone": "bushes_box_count",
+            "name": "Box Count High Density Bushes",
+            "penguin_count": 55,
+            "area_ha": round(area_m2 / 10000, 4),
+            "density_per_ha": round(55 / max(area_m2 / 10000, 0.0001), 2),
+            "notes": (
+                "GPS corners from PDF p.4. Diagnostic shows these coords fall inside "
+                "the Caves tile (11.9), not Bushes (11.10). Client clarification requested."
+            ),
+            "source": "GPS Ground Truthing Notes 2025 - RD.pdf",
+            "caveat": "coordinate_tile_mismatch",
         },
         "geometry": {
             "type": "Polygon",
@@ -274,13 +332,20 @@ def main() -> int:
             print(f"  Caves: {len(caves_feature['geometry']['coordinates'][0])} vertices, "
                   f"{caves_feature['properties']['area_ha']:.4f} ha")
 
-    # Build Plains polygon (with corrected winding order)
+    # Build Plains polygon (with corrected perimeter winding)
     if "plains" in waypoints:
         plains_feature = build_plains_polygon(waypoints["plains"])
         if plains_feature:
             features.append(plains_feature)
             print(f"  Plains: {len(plains_feature['geometry']['coordinates'][0])} vertices, "
                   f"{plains_feature['properties']['area_ha']:.4f} ha")
+
+    # Build Bushes box count polygon (GPS corners from PDF)
+    bushes_feature = build_bushes_box_polygon()
+    if bushes_feature:
+        features.append(bushes_feature)
+        print(f"  Bushes box: {len(bushes_feature['geometry']['coordinates'][0])} vertices, "
+              f"{bushes_feature['properties']['area_ha']:.4f} ha")
 
     output = {
         "type": "FeatureCollection",

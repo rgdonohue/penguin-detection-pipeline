@@ -30,8 +30,11 @@ Caleta (islands):
 
 ## AOI Status
 
-- **San Lorenzo Caves / Plains:** AOIs present (projected to EPSG:5345).
-- **San Lorenzo Road / Box Counts:** AOIs missing (no polygon boundaries in the notes).
+- **San Lorenzo Caves:** AOI present (convex hull of start/end/edge waypoints, EPSG:5345). Area: 0.60 ha (matches reported).
+- **San Lorenzo Plains:** AOI present (perimeter winding of top/bottom edge waypoints, EPSG:5345). Area: 0.73 ha (vs reported 0.98 ha; perimeter is more accurate than convex hull).
+- **San Lorenzo Bushes Box Count:** AOI present from GPS corners in PDF. Area: 0.02 ha. **CAVEAT:** diagnostic confirms these coordinates fall inside the Caves tile (11.9), not the Bushes tile (11.10). Likely a PDF mislabeling or internal waypoints, not box corners. Client clarification requested.
+- **San Lorenzo Caves Box Count:** AOI missing. 32 penguins counted but no GPS corners provided in notes.
+- **San Lorenzo Road:** AOI missing. 359 penguins counted but no waypoints documented.
 - **Caleta Small/Tiny Islands:** AOIs present (projected to EPSG:32720; derived from LiDAR footprint).
 - **Caleta Box Counts:** AOIs missing (need digitized polygons in EPSG:32720).
 
@@ -56,8 +59,23 @@ Caleta (islands):
   - San Lorenzo cave/plains AOIs are still approximate from waypoints and show significant area mismatches.
   - Caleta islands are more robust to derive from LiDAR, but shoreline/tide ambiguity and density-thresholding choices can still shift area.
 
+## AOI Clarification Requests (Client Action Needed)
+
+The following items require client input to resolve AOI boundary uncertainties:
+
+1. **San Lorenzo Road (359 penguins):** No waypoints were documented in the PDF for this zone. Without boundary coordinates, these penguins cannot be included in AOI-clipped evaluation. Request: provide boundary waypoints or digitized polygon from imagery.
+
+2. **San Lorenzo Caves Box Count (32 penguins):** The PDF notes a box count of 32 penguins but does not provide GPS corners for this box. Request: provide 4 corner coordinates.
+
+3. **Bushes Box Count GPS Mismatch:** The 4 GPS coordinates labeled "Box Count High Density Bushes: 55 penguins" in the PDF (p.4) produce a polygon that falls inside the Caves tile (11.9), not the Bushes tile (11.10). The polygon area is also ~200 m² vs the reported ~37,984 m². This suggests either:
+   - (a) The coordinates are mislabeled and actually belong to the Caves box count area, or
+   - (b) They are internal waypoints, not box corners.
+   Request: clarify which area these coordinates represent, and provide correct box corner coordinates if needed.
+
+4. **Plains AOI Approximation:** The perimeter winding of top/bottom edge waypoints gives 0.73 ha vs the reported 0.98 ha. The discrepancy likely arises because the GPS waypoints were recorded at internal transect endpoints, not at the actual survey boundary. Request: provide digitized boundary or annotated imagery for accurate AOI.
+
 ## Next Steps
 
-1. Confirm/digitize AOI polygons for San Lorenzo (caves, plains, road, box counts) and Caleta (small/tiny islands, box counts).
-2. Regenerate AOI eval for all AOIs once polygons are vetted.
+1. Resolve AOI clarification requests above.
+2. Regenerate AOI eval for all AOIs once boundaries are confirmed.
 3. Perform manual precision audit (50–100 candidates) within AOIs.
