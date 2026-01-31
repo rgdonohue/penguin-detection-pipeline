@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -36,7 +36,7 @@ except Exception:  # pragma: no cover
 class AoiFromLidarParams:
     data_root: Path
     out_path: Path
-    crs_epsg: int = 32720
+    crs_epsg: Optional[int] = None
     cell_res_m: float = 1.0
     chunk_size: int = 1_000_000
     min_points_per_cell: int = 1
@@ -56,6 +56,33 @@ class AoiFromLidarParams:
     properties: Dict[str, Any] = field(default_factory=dict)
 
 
+def _autodetect_crs_epsg(files: List[Path]) -> Optional[int]:
+    """Auto-detect CRS EPSG from the first LAS file that has embedded CRS info."""
+    for f in files:
+        try:
+            with laspy.open(str(f)) as fh:
+                h = fh.header
+                if not hasattr(h, "parse_crs"):
+                    continue
+                crs_obj = h.parse_crs()
+                if crs_obj is None:
+                    continue
+                crs_str = str(crs_obj).strip()
+                if not crs_str or crs_str.lower() in ("none", ""):
+                    continue
+                try:
+                    import pyproj
+                    crs_parsed = pyproj.CRS.from_wkt(crs_str) if ("GEOGCS" in crs_str or "PROJCS" in crs_str or "COMPD_CS" in crs_str) else pyproj.CRS.from_user_input(crs_str)
+                    epsg = crs_parsed.to_epsg()
+                    if epsg is not None:
+                        return int(epsg)
+                except Exception:
+                    pass
+        except Exception:
+            continue
+    return None
+
+
 def run(params: AoiFromLidarParams) -> Path:
     if not LASPY_AVAILABLE:
         raise RuntimeError("laspy not available; install requirements.txt (LiDAR stage deps).")
@@ -63,6 +90,18 @@ def run(params: AoiFromLidarParams) -> Path:
     files = find_lidar_files(data_root)
     if not files:
         raise FileNotFoundError(f"No LAS/LAZ files found under {data_root}")
+
+    # Resolve CRS: explicit param > auto-detect > error
+    crs_epsg = params.crs_epsg
+    if crs_epsg is None:
+        crs_epsg = _autodetect_crs_epsg(files)
+    if crs_epsg is None:
+        raise ValueError(
+            "CRS not provided and could not be auto-detected from LAS headers. "
+            "Pass crs_epsg explicitly."
+        )
+    # Use a modified params with resolved CRS for the rest of the function
+    params = replace(params, crs_epsg=crs_epsg)
 
     selector_xy: Optional[Tuple[float, float]] = None
     if params.roi_from_detections is not None:

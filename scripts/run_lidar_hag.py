@@ -148,7 +148,8 @@ def read_bounds_and_counts(las_path: Path, chunk_size: int) -> Tuple[np.ndarray,
     return mins, maxs, npts
 
 
-def _stream_points(las_path: Path, chunk_size: int):
+def _stream_points(las_path: Path, chunk_size: int, include_intensity: bool = False):
+    """Stream LAS points as (x, y, z) or (x, y, z, intensity) tuples."""
     with laspy.open(str(las_path)) as fh:  # type: ignore[attr-defined]
         if hasattr(fh, "chunk_iterator"):
             for pts in fh.chunk_iterator(chunk_size):  # type: ignore[attr-defined]
@@ -156,7 +157,14 @@ def _stream_points(las_path: Path, chunk_size: int):
                 y = np.asarray(pts.y, dtype=np.float64)
                 z = np.asarray(pts.z, dtype=np.float64)
                 if x.size:
-                    yield x, y, z
+                    if include_intensity:
+                        try:
+                            intensity = np.asarray(pts.intensity, dtype=np.float32)
+                        except AttributeError:
+                            intensity = np.zeros_like(x, dtype=np.float32)
+                        yield x, y, z, intensity
+                    else:
+                        yield x, y, z
         else:
             total = int(getattr(fh.header, "point_count", 0))  # type: ignore[attr-defined]
             start = 0
@@ -167,7 +175,14 @@ def _stream_points(las_path: Path, chunk_size: int):
                 y = np.asarray(pts.y, dtype=np.float64)
                 z = np.asarray(pts.z, dtype=np.float64)
                 if x.size:
-                    yield x, y, z
+                    if include_intensity:
+                        try:
+                            intensity = np.asarray(pts.intensity, dtype=np.float32)
+                        except AttributeError:
+                            intensity = np.zeros_like(x, dtype=np.float32)
+                        yield x, y, z, intensity
+                    else:
+                        yield x, y, z
                 start += count
 
 
@@ -227,6 +242,45 @@ def _online_quantile_update_indexed(
     q_flat[uniq] = q_u
 
 
+def _autodetect_crs_from_las(las_path: Path) -> Optional[Dict[str, object]]:
+    """Attempt to auto-detect CRS from LAS file header using laspy's parse_crs()."""
+    if not LASPY_AVAILABLE:
+        return None
+    try:
+        with laspy.open(str(las_path)) as fh:
+            h = fh.header
+            if not hasattr(h, "parse_crs"):
+                return None
+            crs_obj = h.parse_crs()
+            if crs_obj is None:
+                return None
+            crs_str = str(crs_obj).strip()
+            if not crs_str or crs_str.lower() in ("none", ""):
+                return None
+            # Try pyproj to extract EPSG if available
+            try:
+                import pyproj
+                crs_parsed = pyproj.CRS.from_wkt(crs_str) if ("GEOGCS" in crs_str or "PROJCS" in crs_str or "COMPD_CS" in crs_str) else pyproj.CRS.from_user_input(crs_str)
+                epsg = crs_parsed.to_epsg()
+                if epsg is not None:
+                    return {"epsg": int(epsg), "wkt": crs_str}
+                return {"wkt": crs_str}
+            except Exception:
+                # pyproj not available or parse failed; return raw WKT
+                return {"wkt": crs_str}
+    except Exception:
+        return None
+
+
+def _autodetect_crs_from_files(files: List[Path]) -> Optional[Dict[str, object]]:
+    """Auto-detect CRS from the first LAS file that has embedded CRS info."""
+    for f in files:
+        crs = _autodetect_crs_from_las(f)
+        if crs is not None:
+            return crs
+    return None
+
+
 def _crs_meta_from_args(crs_epsg: Optional[int], crs_wkt: Optional[str]) -> Optional[Dict[str, object]]:
     if crs_epsg is None and not crs_wkt:
         return None
@@ -236,6 +290,57 @@ def _crs_meta_from_args(crs_epsg: Optional[int], crs_wkt: Optional[str]) -> Opti
     if crs_wkt:
         meta["wkt"] = str(crs_wkt)
     return meta
+
+
+def compute_confidence_scores(
+    dets: List[Dict],
+    cell_res: float = 0.25,
+    hag_center: float = 0.35,
+    hag_sigma: float = 0.08,
+    area_center_m2: float = 0.10,
+    area_sigma_m2: float = 0.06,
+    circularity_weight: float = 0.5,
+    solidity_weight: float = 0.5,
+) -> None:
+    """Compute a [0, 1] confidence score per detection, modifying dets in-place.
+
+    Score components (geometric mean):
+    - HAG score: Gaussian membership centered on hag_center
+    - Area score: Gaussian membership centered on expected penguin area
+    - Shape score: weighted combination of circularity and solidity
+    - Intensity score (optional): if intensity_mean present
+    """
+    for d in dets:
+        scores = []
+
+        # HAG score
+        hag_mean = d.get("hag_mean")
+        if hag_mean is not None:
+            hag_score = float(np.exp(-0.5 * ((float(hag_mean) - hag_center) / max(hag_sigma, 1e-6)) ** 2))
+            d["confidence_hag"] = round(hag_score, 4)
+            scores.append(hag_score)
+
+        # Area score
+        area_m2 = d.get("area_m2")
+        if area_m2 is not None:
+            area_score = float(np.exp(-0.5 * ((float(area_m2) - area_center_m2) / max(area_sigma_m2, 1e-6)) ** 2))
+            d["confidence_area"] = round(area_score, 4)
+            scores.append(area_score)
+
+        # Shape score
+        circ = d.get("circularity")
+        sol = d.get("solidity")
+        if circ is not None and sol is not None:
+            shape_score = float(circularity_weight * min(float(circ), 1.0) + solidity_weight * min(float(sol), 1.0))
+            d["confidence_shape"] = round(shape_score, 4)
+            scores.append(shape_score)
+
+        # Combined: geometric mean
+        if scores:
+            combined = float(np.prod(scores) ** (1.0 / len(scores)))
+            d["confidence"] = round(max(0.0, min(1.0, combined)), 4)
+        else:
+            d["confidence"] = 0.0
 
 
 def _estimate_grid_bytes(
@@ -753,7 +858,9 @@ def process_file(las_path: Path,
                  geojson_wgs84: bool = False,
                  strict_outputs: bool = False,
                  max_grid_mb: Optional[float] = None,
-                 skip_oversized_tiles: bool = False) -> Dict:
+                 skip_oversized_tiles: bool = False,
+                 extract_intensity: bool = False,
+                 compute_confidence: bool = False) -> Dict:
     if verbose:
         print(f"Processing {las_path.name} ...", flush=True)
     import time as _t
@@ -808,6 +915,34 @@ def process_file(las_path: Path,
         gy, gx = np.gradient(dem, cell_res, cell_res)
         slope_rad = np.arctan(np.hypot(gx, gy))
         slope_arr = np.degrees(slope_rad).astype(np.float32)
+
+    # Optional intensity grid (mean intensity per cell)
+    intensity_grid: Optional[np.ndarray] = None
+    if extract_intensity:
+        intensity_sum = np.zeros((ny, nx), dtype=np.float64)
+        intensity_cnt = np.zeros((ny, nx), dtype=np.int32)
+        for x, y, z, intensity in _stream_points(las_path, chunk_size, include_intensity=True):
+            ix, iy, mask = _bin_indices(x, y, np.array(meta["mins"]), cell_res, ny, nx)
+            if not np.any(mask):
+                continue
+            i_valid = intensity[mask]
+            flat = (iy * nx + ix)
+            if flat.size:
+                np.add.at(intensity_sum.ravel(), flat, i_valid.astype(np.float64))
+                np.add.at(intensity_cnt.ravel(), flat, 1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            intensity_grid = np.where(
+                intensity_cnt > 0,
+                (intensity_sum / intensity_cnt.astype(np.float64)).astype(np.float32),
+                np.float32(0.0),
+            )
+        if verbose:
+            valid = intensity_cnt > 0
+            if valid.any():
+                print(f"    Intensity grid: mean={float(np.mean(intensity_grid[valid])):.1f}, "
+                      f"range=[{float(np.min(intensity_grid[valid])):.0f}, {float(np.max(intensity_grid[valid])):.0f}]",
+                      flush=True)
+
     count, labeled, dets = detect_penguins_from_hag(
         hag, hag_min, hag_max, min_area_cells, max_area_cells,
         smooth_sigma=0.0, connectivity=connectivity,
@@ -823,6 +958,26 @@ def process_file(las_path: Path,
         min_split_area_cells=min_split_area_cells,
         border_trim_px=border_trim_px,
     )
+
+    # Enrich detections with intensity features if grid is available
+    if intensity_grid is not None and dets:
+        intensity_props = measure.regionprops(labeled, intensity_image=intensity_grid)
+        label_to_intensity = {}
+        for rp in intensity_props:
+            label_to_intensity[rp.label] = {
+                "intensity_mean": float(rp.mean_intensity),
+                "intensity_min": float(rp.min_intensity),
+                "intensity_max": float(rp.max_intensity),
+            }
+        for d in dets:
+            lbl = d.get("label")
+            if lbl in label_to_intensity:
+                d.update(label_to_intensity[lbl])
+
+    # Optional confidence scoring
+    if compute_confidence and dets:
+        compute_confidence_scores(dets, cell_res=cell_res)
+
     dt = _t.time() - t0
 
     # Stable ordering + stable IDs (per-tile) for downstream joins and reproducibility.
@@ -976,6 +1131,8 @@ def main() -> None:
     parser.add_argument("--border-trim-px", type=int, default=0, help="Ignore detections closer than N pixels to any image edge")
     parser.add_argument("--slope-max-deg", type=float, default=None, help="Drop candidates where ground slope exceeds this many degrees")
     parser.add_argument("--dedupe-radius-m", type=float, default=None, help="If set, de-duplicate detections across tiles within this radius (meters)")
+    parser.add_argument("--extract-intensity", action="store_true", help="Build per-cell mean intensity grid and add intensity features to detections")
+    parser.add_argument("--compute-confidence", action="store_true", help="Compute a [0,1] confidence score per detection based on HAG, area, and shape features")
 
     args = parser.parse_args()
     if args.hag_min >= args.hag_max:
@@ -1007,7 +1164,28 @@ def main() -> None:
     if det_geojson_dir is not None:
         det_geojson_dir.mkdir(parents=True, exist_ok=True)
 
+    # CRS resolution: explicit CLI arg > auto-detect from LAS headers > None
     crs_meta = _crs_meta_from_args(args.crs_epsg, args.crs_wkt)
+    autodetected_crs: Optional[Dict[str, object]] = None
+    if crs_meta is None and files:
+        autodetected_crs = _autodetect_crs_from_files(files)
+        if autodetected_crs is not None:
+            crs_meta = autodetected_crs
+            if args.verbose:
+                epsg_str = str(autodetected_crs.get("epsg", "unknown"))
+                print(f"CRS auto-detected from LAS headers: EPSG:{epsg_str}", flush=True)
+    elif crs_meta is not None and files:
+        # Check for mismatch between CLI arg and auto-detected CRS
+        autodetected_crs = _autodetect_crs_from_files(files)
+        if autodetected_crs is not None:
+            cli_epsg = crs_meta.get("epsg")
+            auto_epsg = autodetected_crs.get("epsg")
+            if cli_epsg is not None and auto_epsg is not None and int(cli_epsg) != int(auto_epsg):
+                print(
+                    f"WARNING: CLI CRS (EPSG:{cli_epsg}) differs from auto-detected CRS "
+                    f"(EPSG:{auto_epsg}). Using CLI value.",
+                    file=sys.stderr,
+                )
     coord_units = "meters"
     if args.emit_geojson or args.emit_gpkg:
         if args.geojson_wgs84 and crs_meta is None:
@@ -1030,6 +1208,7 @@ def main() -> None:
         "contract": LIDAR_CANDIDATES_CONTRACT,
         "policy": as_policy_dict(),
         "crs": crs_meta,
+        "crs_source": "cli" if autodetected_crs is None and crs_meta is not None else ("autodetect" if autodetected_crs is not None and _crs_meta_from_args(args.crs_epsg, args.crs_wkt) is None else "cli"),
         "coord_units": coord_units,
         "data_root": str(data_root),
         "params": vars(args).copy(),
@@ -1130,6 +1309,8 @@ def main() -> None:
             strict_outputs=args.strict_outputs,
             max_grid_mb=args.max_grid_mb,
             skip_oversized_tiles=args.skip_oversized_tiles,
+            extract_intensity=args.extract_intensity,
+            compute_confidence=args.compute_confidence,
         )
         summary["files"].append(info)
         summary["total_count"] += int(info.get("count", 0))
