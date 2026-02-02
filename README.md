@@ -59,20 +59,37 @@ The **San Lorenzo results (0.19–0.29)** are lower for two documented reasons:
 
 These are candidate counts, not confirmed penguin identifications. Precision estimation (what fraction of candidates are actually penguins) requires manual spot-checking of detection samples.
 
+## Feature Analysis
+
+Beyond geometric filtering, per-detection spectral features were extracted to assess detection quality and provide evidence for the question "how do we know these are penguins?"
+
+**Key finding:** Inside-AOI detections have a remarkably consistent spectral signature — 86% of Caleta Tiny Island detections form a tight core with consistent NIR intensity, warm-toned RGB, and near-zero greenness. This homogeneity is not explained by the pipeline's geometric filters (morphological features show no inside/outside difference) and provides independent evidence that detections represent a single object class.
+
+| Feature | Discriminative Power | Cross-site / Cross-sensor |
+|---------|---------------------|--------------------------|
+| Intensity (NIR) | Strong within-site | Poor — site-specific and sensor-locked |
+| Greenness (G−R)/(G+R) | Moderate | Good — consistent near-zero across sites and sensors |
+| Color warmth (R−B) | Moderate | Unknown |
+| Multi-return fraction | None | None — <1% multi-return even on TrueView 515 |
+
+Parameter sensitivity analysis shows **hag_max is the dominant parameter** — detection counts vary 3–4× more with the upper height bound than with any other parameter. Full analysis in `docs/reports/FEATURE_ANALYSIS.md`.
+
 ## Current Status
 
 | Component | Status | Summary |
 |-----------|--------|---------|
 | LiDAR detection | Working | Deterministic pipeline with regression tests; compared against Argentina field data |
 | AOI evaluation | Working | Tools for clipping detections to survey boundaries and computing site-level counts |
+| Feature analysis | Complete | RGB, intensity, greenness for 3 sites across 2 sensors; parameter sweeps |
+| Precision estimation | In progress | 80-sample label bundles generated for 2 sites; manual labeling underway |
 | Thermal extraction | Paused | 16-bit radiometric extraction works; temperature calibration unresolved |
 | Thermal-LiDAR fusion | Paused | Spatial join exists; blocked on thermal georeferencing |
 | Ground truth | Incomplete | ~3,705 field counts available; AOI boundary confirmation needed from field team |
 
 ### What's Needed Next
 
-1. **AOI boundary confirmation** — The field team needs to provide or confirm digitized polygon boundaries for San Lorenzo sites. A detailed clarification request is available in `notes/client_aoi_clarifications.md`.
-2. **Precision estimation** — Manual labeling of 50–100 candidate detections within a validated AOI to quantify what fraction are true penguins vs. rocks or vegetation. Protocol documented in `docs/process/LABELING_PROTOCOL.md`.
+1. **Precision estimation** — Manual labeling of 80-sample bundles (Caleta Tiny and Small Islands) is in progress. Each sample has RGB+HAG dual-panel crop images for visual classification. Protocol: `docs/process/LABELING_PROTOCOL.md`. Precision estimation via `scripts/estimate_precision.py` will follow.
+2. **AOI boundary confirmation** — The field team needs to provide or confirm digitized polygon boundaries for San Lorenzo sites. A detailed clarification request is available in `notes/client_aoi_clarifications.md`.
 3. **Box count validation** — Running LiDAR detection on the smaller box count areas (San Lorenzo: 32 and 55 penguins; Caleta: 8 and 12 penguins) where ground truth boundaries are more precise.
 
 ### Future Work (Deprioritized)
@@ -146,6 +163,8 @@ The pipeline produces deterministic results — the same input always gives the 
 | [docs/reports/STATUS.md](docs/reports/STATUS.md) | Current implementation state |
 | [docs/reports/LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md) | Algorithm documentation |
 | [docs/reports/LIDAR_VALIDATION.md](docs/reports/LIDAR_VALIDATION.md) | AOI-clipped validation results |
+| [docs/reports/FEATURE_ANALYSIS.md](docs/reports/FEATURE_ANALYSIS.md) | Per-detection feature analysis and parameter sensitivity |
+| [docs/process/LABELING_PROTOCOL.md](docs/process/LABELING_PROTOCOL.md) | Manual labeling protocol for precision estimation |
 
 ## License
 
