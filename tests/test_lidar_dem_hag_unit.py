@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 
@@ -11,6 +12,27 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import run_lidar_hag as lidar  # noqa: E402
+
+
+def _default_args(**overrides) -> argparse.Namespace:
+    """Return an argparse.Namespace with valid defaults, applying *overrides*."""
+    defaults = dict(
+        cell_res=0.25,
+        chunk_size=1_000_000,
+        hag_min=0.2,
+        hag_max=0.6,
+        se_radius_m=0.15,
+        border_trim_px=0,
+        circularity_min=0.2,
+        solidity_min=0.7,
+        refine_grid_pct=None,
+        slope_max_deg=None,
+        dedupe_radius_m=None,
+        max_grid_mb=512.0,
+        h_maxima=0.05,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
 
 
 def _patch_lidar_stream(
@@ -160,3 +182,92 @@ def test_watershed_split_uses_unique_labels_across_regions():
     assert labeled.max() >= 4
     assert count == 4
     assert len(dets) == 4
+
+
+# ---------------------------------------------------------------------------
+# Parameter validation tests
+# ---------------------------------------------------------------------------
+
+class TestValidateParams:
+    def test_validate_rejects_zero_cell_res(self):
+        with pytest.raises(SystemExit, match="cell_res must be > 0"):
+            lidar._validate_params(_default_args(cell_res=0))
+
+    def test_validate_rejects_negative_hag_min(self):
+        with pytest.raises(SystemExit, match="hag_min must be >= 0"):
+            lidar._validate_params(_default_args(hag_min=-1))
+
+    def test_validate_rejects_invalid_circularity(self):
+        with pytest.raises(SystemExit, match="circularity_min must be in"):
+            lidar._validate_params(_default_args(circularity_min=1.5))
+
+    def test_validate_accepts_valid_defaults(self):
+        # Should not raise
+        lidar._validate_params(_default_args())
+
+
+# ---------------------------------------------------------------------------
+# Deduplication tests
+# ---------------------------------------------------------------------------
+
+class TestDeduplication:
+    def test_dedupe_merges_nearby(self):
+        dets = [
+            {"id": "a:00001", "x": 0.0, "y": 0.0, "file": "a.las"},
+            {"id": "a:00002", "x": 0.1, "y": 0.1, "file": "a.las"},
+        ]
+        result, index = lidar._dedupe_detections(dets, radius_m=1.0)
+        assert len(result) == 1
+
+    def test_dedupe_preserves_distant(self):
+        dets = [
+            {"id": "a:00001", "x": 0.0, "y": 0.0, "file": "a.las"},
+            {"id": "a:00002", "x": 100.0, "y": 100.0, "file": "a.las"},
+        ]
+        result, index = lidar._dedupe_detections(dets, radius_m=1.0)
+        assert len(result) == 2
+
+    def test_dedupe_empty_list(self):
+        result, index = lidar._dedupe_detections([], radius_m=1.0)
+        assert result == []
+        assert index == {}
+
+
+# ---------------------------------------------------------------------------
+# Confidence scoring tests
+# ---------------------------------------------------------------------------
+
+class TestConfidenceScoring:
+    def test_confidence_scores_between_0_and_1(self):
+        dets = [
+            {"hag_mean": 0.35, "area_m2": 0.10, "circularity": 0.8, "solidity": 0.9},
+            {"hag_mean": 0.1, "area_m2": 0.5, "circularity": 0.3, "solidity": 0.4},
+            {"hag_mean": 0.6, "area_m2": 0.01, "circularity": 1.0, "solidity": 1.0},
+        ]
+        lidar.compute_confidence_scores(dets)
+        for d in dets:
+            assert 0.0 <= d["confidence"] <= 1.0
+
+    def test_confidence_ideal_penguin_scores_high(self):
+        dets = [{"hag_mean": 0.35, "area_m2": 0.10, "circularity": 0.85, "solidity": 0.95}]
+        lidar.compute_confidence_scores(dets)
+        assert dets[0]["confidence"] > 0.5
+
+
+# ---------------------------------------------------------------------------
+# Detection edge case
+# ---------------------------------------------------------------------------
+
+def test_hag_grid_all_below_threshold_gives_zero_detections():
+    """All HAG values below hag_min should produce zero detections."""
+    hag = np.full((20, 20), 0.05, dtype=np.float32)  # well below 0.2
+    count, labeled, dets = lidar.detect_penguins_from_hag(
+        hag,
+        hag_min=0.2,
+        hag_max=0.6,
+        min_area_cells=2,
+        max_area_cells=80,
+    )
+    assert count == 0
+    assert dets == []
+    assert labeled.max() == 0

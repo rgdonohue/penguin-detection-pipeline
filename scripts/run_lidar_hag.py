@@ -64,6 +64,12 @@ def _is_sample_path(path: Path) -> bool:
 
 
 def find_lidar_files(root: Path) -> List[Path]:
+    """Recursively discover LAS/LAZ files under *root*, deduplicating sample/ copies.
+
+    When both a ``sample/`` version and a non-sample version of the same
+    filename exist, only the non-sample path is kept.  Results are sorted by
+    string path for deterministic ordering.
+    """
     files: List[Path] = []
     for dp, _dns, fns in os.walk(root):
         for fn in fns:
@@ -265,10 +271,11 @@ def _autodetect_crs_from_las(las_path: Path) -> Optional[Dict[str, object]]:
                 if epsg is not None:
                     return {"epsg": int(epsg), "wkt": crs_str}
                 return {"wkt": crs_str}
-            except Exception:
+            except (ImportError, ValueError, RuntimeError):
                 # pyproj not available or parse failed; return raw WKT
                 return {"wkt": crs_str}
-    except Exception:
+    except (OSError, ValueError, KeyError, AttributeError) as exc:
+        print(f"WARNING: CRS auto-detection failed for {las_path.name}: {exc}", file=sys.stderr)
         return None
 
 
@@ -494,6 +501,13 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
                      ground_method: str = "min",
                      quantile_lr: float = 0.05,
                      bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None) -> Tuple[np.ndarray, Dict]:
+    """Build a ground-surface DEM by streaming LAS points into a regular grid.
+
+    Uses either per-cell minimum Z (``ground_method='min'``) or an online 5th
+    percentile estimate (``ground_method='p05'``).  No-data cells are filled via
+    nearest-neighbor interpolation.  Returns the DEM array and a metadata dict
+    containing grid origin, extent, cell resolution, and shape.
+    """
     if bounds is None:
         mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
     else:
@@ -560,6 +574,13 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
                    top_method: str = "max",
                    top_zscore_cap: Optional[float] = None,
                    top_quantile_lr: float = 0.05) -> np.ndarray:
+    """Compute per-cell Height Above Ground by streaming LAS points against *dem*.
+
+    For each point the HAG is ``z - DEM[cell]``; the per-cell aggregate is either
+    the maximum (``top_method='max'``) or an online 95th percentile estimate
+    (``top_method='p95'``).  An optional Z-score cap suppresses outlier spikes.
+    The returned array is clipped to non-negative values.
+    """
     mins = np.array(meta["mins"], dtype=float)
     cell_res = float(meta["cell_res"])
     ny, nx = dem.shape
@@ -618,6 +639,14 @@ def detect_penguins_from_hag(hag: np.ndarray,
                              h_maxima_h: float = 0.05,
                              min_split_area_cells: int = 12,
                              border_trim_px: int = 0) -> Tuple[int, np.ndarray, List[Dict]]:
+    """Detect penguin-sized blobs from a HAG grid via threshold, morphology, and labeling.
+
+    Returns ``(count, labeled_image, detections_list)``.  Each detection dict
+    contains centroid coordinates (row/col and optionally projected x/y), area,
+    shape metrics (circularity, solidity), and HAG statistics.  Optional
+    watershed splitting subdivides large blobs that likely contain multiple
+    individuals.
+    """
     # Optional smoothing
     img = hag.copy()
     if smooth_sigma > 0:
@@ -743,6 +772,13 @@ def save_plot(hag: np.ndarray, labeled: np.ndarray, out_png: Path, title: str,
               min_area_cells: int, max_area_cells: int, det_count: int,
               fixed_vmin: Optional[float] = None,
               fixed_vmax: Optional[float] = None) -> None:
+    """Save a QC visualization PNG showing the HAG heatmap with detection overlays.
+
+    Detections are rendered as semi-transparent fill regions with cyan outlines
+    and numbered centroid markers.  A text panel shows grid parameters and
+    detection count.  Color scale can be fixed across tiles via *fixed_vmin*
+    and *fixed_vmax* for visual consistency.
+    """
     if not MATPLOTLIB_AVAILABLE:
         return
     out_png.parent.mkdir(parents=True, exist_ok=True)
@@ -861,6 +897,13 @@ def process_file(las_path: Path,
                  skip_oversized_tiles: bool = False,
                  extract_intensity: bool = False,
                  compute_confidence: bool = False) -> Dict:
+    """Process a single LAS/LAZ tile: build DEM, compute HAG, detect candidates.
+
+    Orchestrates the full per-tile pipeline (ground DEM → HAG grid → detection →
+    optional intensity/confidence enrichment → optional GeoJSON/plot output) and
+    returns a summary dict with detection count, timing, grid metadata, and the
+    list of detection records.
+    """
     if verbose:
         print(f"Processing {las_path.name} ...", flush=True)
     import time as _t
@@ -935,6 +978,12 @@ def process_file(las_path: Path,
                 intensity_cnt > 0,
                 (intensity_sum / intensity_cnt.astype(np.float64)).astype(np.float32),
                 np.float32(0.0),
+            )
+        if not np.any(intensity_cnt > 0) or float(np.max(intensity_sum)) == 0.0:
+            print(
+                f"WARNING: {las_path.name}: intensity data is all zeros; "
+                f"LAS file may lack intensity values. Intensity features will be empty.",
+                file=sys.stderr,
             )
         if verbose:
             valid = intensity_cnt > 0
@@ -1062,6 +1111,43 @@ def process_file(las_path: Path,
     return info
 
 
+def _validate_params(args: argparse.Namespace) -> None:
+    """Validate all CLI parameters beyond the hag_min/hag_max and area checks.
+
+    Collects all violations and reports them together via SystemExit so the
+    user can fix everything in one pass.
+    """
+    errors: list[str] = []
+
+    if args.cell_res <= 0:
+        errors.append(f"cell_res must be > 0, got {args.cell_res}")
+    if args.chunk_size <= 0:
+        errors.append(f"chunk_size must be > 0, got {args.chunk_size}")
+    if args.hag_min < 0:
+        errors.append(f"hag_min must be >= 0, got {args.hag_min}")
+    if args.se_radius_m < 0:
+        errors.append(f"se_radius_m must be >= 0, got {args.se_radius_m}")
+    if args.border_trim_px < 0:
+        errors.append(f"border_trim_px must be >= 0, got {args.border_trim_px}")
+    if not (0 <= args.circularity_min <= 1):
+        errors.append(f"circularity_min must be in [0, 1], got {args.circularity_min}")
+    if not (0 <= args.solidity_min <= 1):
+        errors.append(f"solidity_min must be in [0, 1], got {args.solidity_min}")
+    if args.refine_grid_pct is not None and not (0 < args.refine_grid_pct <= 100):
+        errors.append(f"refine_grid_pct must be in (0, 100], got {args.refine_grid_pct}")
+    if args.slope_max_deg is not None and not (0 < args.slope_max_deg < 90):
+        errors.append(f"slope_max_deg must be in (0, 90), got {args.slope_max_deg}")
+    if args.dedupe_radius_m is not None and args.dedupe_radius_m <= 0:
+        errors.append(f"dedupe_radius_m must be > 0, got {args.dedupe_radius_m}")
+    if args.max_grid_mb <= 0:
+        errors.append(f"max_grid_mb must be > 0, got {args.max_grid_mb}")
+    if args.h_maxima <= 0:
+        errors.append(f"h_maxima must be > 0, got {args.h_maxima}")
+
+    if errors:
+        raise SystemExit("Parameter validation failed:\n  " + "\n  ".join(errors))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LiDAR penguin detection via DEM+HAG")
     parser.add_argument("--data-root", required=True, help="Folder with LAS/LAZ files")
@@ -1139,6 +1225,7 @@ def main() -> None:
         raise SystemExit("hag_min must be < hag_max")
     if args.min_area_cells >= args.max_area_cells:
         raise SystemExit("min_area_cells must be < max_area_cells")
+    _validate_params(args)
 
     data_root = Path(args.data_root).resolve()
     out_path = Path(args.out).resolve()
@@ -1271,53 +1358,62 @@ def main() -> None:
                 global_vmax = float(args.hag_max)
 
     all_detections: list[dict] = []
+    file_errors: list[dict] = []
     for f in files:
         geojson_path = None
         if det_geojson_dir is not None:
             geojson_path = det_geojson_dir / f"{f.stem}_detections.geojson"
-        info = process_file(
-            f,
-            cell_res=args.cell_res,
-            hag_min=args.hag_min,
-            hag_max=args.hag_max,
-            min_area_cells=args.min_area_cells,
-            max_area_cells=args.max_area_cells,
-            chunk_size=args.chunk_size,
-            verbose=args.verbose,
-            plots_dir=plots_dir,
-            fixed_vmin=global_vmin,
-            fixed_vmax=global_vmax,
-            ground_method=args.ground_method,
-            top_method=args.top_method,
-            top_zscore_cap=args.top_zscore_cap,
-            top_quantile_lr=args.top_quantile_lr,
-            refine_grid_pct=args.refine_grid_pct,
-            refine_size=args.refine_size,
-            se_radius_m=args.se_radius_m,
-            circularity_min=args.circularity_min,
-            solidity_min=args.solidity_min,
-            apply_watershed=args.watershed,
-            h_maxima_h=args.h_maxima,
-            min_split_area_cells=args.min_split_area_cells,
-            border_trim_px=args.border_trim_px,
-            slope_max_deg=args.slope_max_deg,
-            connectivity=args.connectivity,
-            emit_geojson_path=geojson_path,
-            geojson_crs=crs_meta,
-            geojson_coord_units=coord_units,
-            geojson_wgs84=args.geojson_wgs84,
-            strict_outputs=args.strict_outputs,
-            max_grid_mb=args.max_grid_mb,
-            skip_oversized_tiles=args.skip_oversized_tiles,
-            extract_intensity=args.extract_intensity,
-            compute_confidence=args.compute_confidence,
-        )
+        try:
+            info = process_file(
+                f,
+                cell_res=args.cell_res,
+                hag_min=args.hag_min,
+                hag_max=args.hag_max,
+                min_area_cells=args.min_area_cells,
+                max_area_cells=args.max_area_cells,
+                chunk_size=args.chunk_size,
+                verbose=args.verbose,
+                plots_dir=plots_dir,
+                fixed_vmin=global_vmin,
+                fixed_vmax=global_vmax,
+                ground_method=args.ground_method,
+                top_method=args.top_method,
+                top_zscore_cap=args.top_zscore_cap,
+                top_quantile_lr=args.top_quantile_lr,
+                refine_grid_pct=args.refine_grid_pct,
+                refine_size=args.refine_size,
+                se_radius_m=args.se_radius_m,
+                circularity_min=args.circularity_min,
+                solidity_min=args.solidity_min,
+                apply_watershed=args.watershed,
+                h_maxima_h=args.h_maxima,
+                min_split_area_cells=args.min_split_area_cells,
+                border_trim_px=args.border_trim_px,
+                slope_max_deg=args.slope_max_deg,
+                connectivity=args.connectivity,
+                emit_geojson_path=geojson_path,
+                geojson_crs=crs_meta,
+                geojson_coord_units=coord_units,
+                geojson_wgs84=args.geojson_wgs84,
+                strict_outputs=args.strict_outputs,
+                max_grid_mb=args.max_grid_mb,
+                skip_oversized_tiles=args.skip_oversized_tiles,
+                extract_intensity=args.extract_intensity,
+                compute_confidence=args.compute_confidence,
+            )
+        except Exception as exc:
+            msg = f"Failed to process {f.name}: {exc}"
+            print(f"ERROR: {msg}", file=sys.stderr)
+            info = {"path": str(f), "count": 0, "error": msg}
+            file_errors.append({"file": str(f), "error": str(exc)})
         summary["files"].append(info)
         summary["total_count"] += int(info.get("count", 0))
         # Collect detection records for optional batch-level de-duplication
         for d in info.get("detections", []) or []:
             if "x" in d and "y" in d and d.get("id"):
                 all_detections.append(d)
+    if file_errors:
+        summary["file_errors"] = file_errors
 
     # Cross-tile de-duplication (batch artifact + count)
     deduped: list[dict] | None = None
