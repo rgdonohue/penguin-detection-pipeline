@@ -1,0 +1,43 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: Caleta Small Island
+slug: caleta_small_island
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: L2 LiDAR
+site: caleta
+mission: caleta_small_island
+flight_group: l2_caleta
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 32720
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 21692344
+tile_count: 17
+tiles:
+  - cloud0.las
+  - cloud1.las
+  - cloud10.las
+  - cloud11.las
+  - cloud12.las
+  - cloud13.las
+  - cloud14.las
+  - cloud15.las
+  - cloud16.las
+  - cloud2.las
+  - cloud3.las
+  - cloud4.las
+  - cloud5.las
+  - cloud6.las
+  - cloud7.las
+  - cloud8.las
+  - cloud9.las
+notes: Small Island coverage; 1,557 penguins, 4 ha
+flight_date: 2025-11-16
+las_version: 1.2
+generating_software: LASzip DLL 3.4 r3 (191111)
+system_identifier: REpJLUwxLUJlcnRoYS4=
+sensor_model: None
+sensor_serial: None
+source_las_file: cloud0.las

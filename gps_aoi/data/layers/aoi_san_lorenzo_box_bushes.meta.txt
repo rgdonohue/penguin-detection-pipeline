@@ -1,0 +1,18 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: Box Count High Density Bushes
+slug: aoi_san_lorenzo_box_bushes
+layer_type: gps_aoi
+sensor_type: gps_aoi
+sensor: GPS (field survey)
+site: san_lorenzo
+mission: gps_box_bushes
+flight_group: field_survey_san_lorenzo
+source_file: san_lorenzo_box_bushes_wgs84.geojson
+source_pdf: GPS Ground Truthing Notes 2025 - RD.pdf
+output_crs: EPSG:4326 (WGS84)
+geometry_type: Polygon
+penguin_count: 55
+notes: High Density Bushes box count; 4 corner coords. CAVEAT: coords fall in wrong LAS tile
+status: valid

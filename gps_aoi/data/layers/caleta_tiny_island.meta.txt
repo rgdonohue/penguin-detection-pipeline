@@ -1,0 +1,28 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: Caleta Tiny Island
+slug: caleta_tiny_island
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: L2 LiDAR
+site: caleta
+mission: caleta_tiny_island
+flight_group: l2_caleta
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 32720
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 8429873
+tile_count: 2
+tiles:
+  - cloud0.las
+  - cloud1.las
+notes: Tiny Island coverage; 321 penguins, 0.7 ha
+flight_date: 2025-11-10
+las_version: 1.2
+generating_software: DJI TERRA 4.5.18.1 DJI L2
+system_identifier: REpJLUwxLUJlcnRoYS4=
+sensor_model: DJI L2
+sensor_serial: None
+source_las_file: cloud0.las

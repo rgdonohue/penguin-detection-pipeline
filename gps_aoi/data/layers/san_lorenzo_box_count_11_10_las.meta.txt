@@ -1,0 +1,27 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: San Lorenzo Box Count 11.10 LAS
+slug: san_lorenzo_box_count_11_10_las
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: GeoCue TrueView 515
+site: san_lorenzo
+mission: san_lorenzo_box_bushes
+flight_group: geocue_san_lorenzo
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 5345
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 36020653
+tile_count: 1
+tiles:
+  - San Lorenzo Box Count 11.10 LAS.las
+notes: High Density Bushes box count area (tile 11.10)
+flight_date: 2025-11-24
+las_version: 1.4
+generating_software: LP360 from GeoCue Group Inc.
+system_identifier: TrueView516:123SN083:250520
+sensor_model: TrueView516
+sensor_serial: 123SN083
+source_las_file: San Lorenzo Box Count 11.10 LAS.las

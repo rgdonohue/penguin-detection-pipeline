@@ -1,0 +1,17 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: gps_caleta_small
+slug: aoi_caleta_small_island
+layer_type: gps_aoi
+sensor_type: gps_aoi
+sensor: GPS (field survey)
+site: caleta
+mission: gps_caleta_small
+flight_group: field_survey_caleta
+source_file: caleta_small_island_wgs84.geojson
+output_crs: EPSG:4326 (WGS84)
+geometry_type: EMPTY
+penguin_count: 1557
+notes: Small Island boundary; NO WAYPOINTS IN PDF - use LiDAR coverage instead
+status: empty

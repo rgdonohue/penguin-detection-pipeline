@@ -1,0 +1,45 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "aoi_id": "san_lorenzo_caves",
+        "name": "High Density Caves",
+        "source": "GPS Ground Truthing Notes 2025 - RD.pdf",
+        "penguin_count": 908
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -63.87435000000006,
+              -42.08628500000018
+            ],
+            [
+              -63.87342700000006,
+              -42.08910700000022
+            ],
+            [
+              -63.87331000000005,
+              -42.0888780000002
+            ],
+            [
+              -63.87395100000006,
+              -42.0866560000002
+            ],
+            [
+              -63.87407200000007,
+              -42.086263000000216
+            ],
+            [
+              -63.87435000000006,
+              -42.08628500000018
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

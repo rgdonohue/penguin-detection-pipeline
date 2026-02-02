@@ -26,6 +26,11 @@ gps_aoi/
    - Add or edit CSVs in `data/waypoints/` (from PDF or field notes).
    - Columns: `lat`, `lon`, `point_type`, `description`.
    - Decimal degrees, Argentina: lat ~-42 to -43, lon ~-64 to -66.
+   - **Extract from PDF text:** If you have a text export of the Ground Truthing PDF (e.g. `gps_aoi/data/raw/pdf_extract.txt` or `pdftotext ...`), run:
+     ```bash
+     python gps_aoi/scripts/extract_waypoints.py --from-pdf-text gps_aoi/data/raw/pdf_extract.txt --out-dir gps_aoi/data/waypoints
+     ```
+     This overwrites Caves, Plains, and Box Bushes CSVs with parsed coordinates (and applies the Plains longitude typo fix). See `docs/WAYPOINT_SOURCES.md`.
 
 2. **Templates**
    ```bash

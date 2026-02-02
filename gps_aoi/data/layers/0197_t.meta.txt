@@ -1,0 +1,19 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: 0197_T
+slug: 0197_t
+layer_type: sensor_coverage
+sensor_type: thermal
+sensor: DJI H30T
+site: san_lorenzo
+mission: thermal_target_0197
+flight_group: h30t_san_lorenzo
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: None
+output_crs: EPSG:4326 (WGS84)
+geometry_type: Point
+point_count: None
+tile_count: None
+tiles:
+notes: LRF thermal target point; yaw -179°

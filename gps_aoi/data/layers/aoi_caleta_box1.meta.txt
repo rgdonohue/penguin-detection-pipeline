@@ -1,0 +1,17 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: gps_caleta_box1
+slug: aoi_caleta_box1
+layer_type: gps_aoi
+sensor_type: gps_aoi
+sensor: GPS (field survey)
+site: caleta
+mission: gps_caleta_box1
+flight_group: field_survey_caleta
+source_file: caleta_box1_wgs84.geojson
+output_crs: EPSG:4326 (WGS84)
+geometry_type: EMPTY
+penguin_count: 8
+notes: Box Count 1 (mainland); NO WAYPOINTS IN PDF
+status: empty

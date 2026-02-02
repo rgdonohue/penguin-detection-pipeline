@@ -1,0 +1,17 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: gps_road_total_count
+slug: aoi_san_lorenzo_road
+layer_type: gps_aoi
+sensor_type: gps_aoi
+sensor: GPS (field survey)
+site: san_lorenzo
+mission: gps_road_total_count
+flight_group: field_survey_san_lorenzo
+source_file: san_lorenzo_road_wgs84.geojson
+output_crs: EPSG:4326 (WGS84)
+geometry_type: EMPTY
+penguin_count: 359
+notes: Road total count; NO WAYPOINTS IN PDF - boundary data needed
+status: empty

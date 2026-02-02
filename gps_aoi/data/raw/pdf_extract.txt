@@ -1,0 +1,120 @@
+GPS Ground Truthing Notes
+Missions:
+GeoCue LiDAR:
+- San Lorenzo Full
+- San Lorenzo High Density Caves Box Count
+- San Lorenzo High Density Bushed Box Count
+L2 LiDAR:
+- Caleta Tiny Island
+- Caleta Small Island
+- Caleta Box Count 1
+- Caleta Box Count 2
+H30T Thermal:
+- San Lorenzo High Density Caves Box Count
+- San Lorenzo High Density Bushes Box Count
+- San Lorenzo Road Total Count
+- San Lorenzo Plains Total Count
+- San Lorenzo Caves Total Count
+- Caleta Tiny Island
+- Caleta Small Island
+- Caleta Box Count 1 (mainland)
+- Caleta Box Count 2 (mainland)
+Counted Areas:
+Caleta:
+Tiny Island: 321 Counted Penguins, 0.7 ha
+Sensors flown: L2 (ortho), H30T
+Small Island: 1557 Counted Penguins, 4 ha
+Sensors flown: L2 (Ortho), H30T
+
+-- 1 of 8 --
+
+Box Count 1: 8 Counted Penguins (one walked outside collection zone during flight)
+Box Count 2: 12 Counted Penguins (only counted inside rope bounds)
+
+-- 2 of 8 --
+
+San Lorenzo:
+Full Area: Not fully counted, 66 ha
+San Lorenzo Road Total Count 359 Counted Penguins (see waypoints below)
+San Lorenzo Plains Total Count 453 Counted Penguins (see waypoints below)
+San Lorenzo Caves Total Count 908 Counted Penguins (see waypoints below)
+Box Count High Density Caves: 32 Counted Penguins (2 walked out between thermal
+and LiDAR)
+
+-- 3 of 8 --
+
+COORDINATES:
+42.085273 S, 63.866958 W
+42.085258 S, 63.867123 W
+42.085381 S, 63.867161 W
+42.085392 S, 63.866972 W
+Box Count High Density Bushes: 55 Counted Penguins
+
+-- 4 of 8 --
+
+San Lorenzo WayPoints:
+High Density Caves Total Count Area: 908 Counted Penguins
+Start: 42.086263 S, 63.874072 W and 42.086285 S, 63.874350 W
+End: 42.088878 S, 63.873310 W and 42.089107 S, 63.873427 W
+Along Right edge (taken every few minutes):
+42.086656 S, 63.873951 W
+42.087376 S, 63.873872 W
+42.087740 S, 63.873728 W
+42.088702 S, 63.873419 W
+The Plains Total Count Area: 453 Counted Penguins
+Start: 42.084371 S, 63.867582 W and 42.084520 S, 63.867496 W
+End: 42.085076 S, 63.871035 W and 42.085348 S, 63.870886 W
+Along Top Edge (taken every few minutes):
+42.084360 S, 63.867691 W
+42.084418 S, 63.868053 W
+42.084467 S, 63.868250 W
+42.084534 S, 63.868537 W
+42.084587 S, 63.868683 W
+42.084671 S, 63.868935 W
+42.084725 S, 63.869125 W
+42.084772 S, 63.869388 W
+
+-- 5 of 8 --
+
+42.084836 S, 63.869808 W
+42.084864 S, 63.869953 W
+42.084915 S, 63.870255 W
+42.084953 S, 63.870431 W
+42.085021 S, 63.870748 W
+Along Bottom Edge:
+42.084371 S, 63.867582 W
+42.084520 S, 63.867496 W
+42.085073 S, 63.870863 W
+42.084597 S, 63.867633 W
+42.084635 S, 63.867793 W
+42.084658 S, 63.867900 W
+42.084704 S, 63.868023 W
+42.084741 S, 63.868187 W
+42.084776 S, 63.868289 W
+42.084813 S, 63.868448 W
+42.084837 S, 63.868602 W
+42.084867 S, 63.868800 W
+42.084894 S, 63.868955 W
+42.084942 S, 63.869132 W
+42.085004 S, 63.869279 W
+42.085049 S, 63.869395 W
+42.085090 S, 63.869588 W
+42.085140 S, 63.869811 W
+42.085151 S, 63.869924 W
+42.085187 S, 63.860152 W
+The Road Total Count Area: 359 Counted Penguins
+Start:
+End:
+Along Edges:
+Box Count Photos Marked Up:
+
+-- 6 of 8 --
+
+
+
+-- 7 of 8 --
+
+
+
+-- 8 of 8 --
+

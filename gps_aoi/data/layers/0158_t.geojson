@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "0158_T",
+        "dataset_type": "thermal",
+        "yaw_deg": 90,
+        "site": "san_lorenzo",
+        "source": "LRF targets from GPS Ground Truthing Notes"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -63.86713,
+          -42.08537
+        ]
+      }
+    }
+  ]
+}

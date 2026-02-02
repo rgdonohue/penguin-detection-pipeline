@@ -1,0 +1,27 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: San Lorenzo Full LiDAR LAS
+slug: san_lorenzo_full_lidar_las
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: GeoCue TrueView 515
+site: san_lorenzo
+mission: san_lorenzo_full
+flight_group: geocue_san_lorenzo
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 5345
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 674769456
+tile_count: 1
+tiles:
+  - San Lorenzo Full LiDAR LAS.las
+notes: Full 66 ha coverage of San Lorenzo site
+flight_date: 2025-11-20
+las_version: 1.4
+generating_software: LP360 from GeoCue Group Inc.
+system_identifier: TrueView516:123SN083:250520
+sensor_model: TrueView516
+sensor_serial: 123SN083
+source_las_file: San Lorenzo Full LiDAR LAS.las

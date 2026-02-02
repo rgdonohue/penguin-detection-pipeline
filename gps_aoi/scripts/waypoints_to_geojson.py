@@ -58,6 +58,25 @@ def load_waypoints(csv_path: Path) -> list[tuple[float, float]]:
     return points
 
 
+def load_waypoints_with_types(csv_path: Path) -> list[tuple[float, float, str]]:
+    """Return list of (lat, lon, point_type) for rows with valid coordinates."""
+    rows: list[tuple[float, float, str]] = []
+    with open(csv_path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            lat_s = (row.get("lat") or "").strip()
+            lon_s = (row.get("lon") or "").strip()
+            pt = (row.get("point_type") or "").strip() or "point"
+            if not lat_s or not lon_s:
+                continue
+            try:
+                lat, lon = float(lat_s), float(lon_s)
+                if -90 <= lat <= 90 and -180 <= lon <= 180:
+                    rows.append((lat, lon, pt))
+            except ValueError:
+                continue
+    return rows
+
+
 def convex_hull_latlon(points: list[tuple[float, float]], crs_epsg: int) -> list[tuple[float, float]]:
     """Convex hull in projected space, return hull as (lat, lon)."""
     if len(points) < 3:
@@ -132,7 +151,55 @@ def build_feature(
     return {"type": "Feature", "properties": props, "geometry": {"type": "Polygon", "coordinates": [coords]}}
 
 
-def process_site(site_id: str, points: list[tuple[float, float]], cfg: dict[str, Any]) -> dict[str, Any] | None:
+def build_plains_ring(typed_rows: list[tuple[float, float, str]], crs_epsg: int) -> list[tuple[float, float]] | None:
+    """Build Plains polygon from top_edge and bottom_edge waypoints (perimeter winding).
+
+    Sort top edge west-to-east, bottom edge east-to-west, concatenate to form closed ring.
+    Avoids bowtie from naive concatenation.
+    """
+    top_edge = [(lat, lon) for lat, lon, pt in typed_rows if pt == "top_edge"]
+    bottom_edge = [(lat, lon) for lat, lon, pt in typed_rows if pt == "bottom_edge"]
+    if not top_edge or not bottom_edge:
+        return None
+    # De-duplicate within ~1m (same lat/lon)
+    def dedup(pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        seen: set[tuple[float, float]] = set()
+        out: list[tuple[float, float]] = []
+        for p in pts:
+            key = (round(p[0], 5), round(p[1], 5))
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
+        return out
+    top_edge = dedup(top_edge)
+    bottom_edge = dedup(bottom_edge)
+    if len(top_edge) < 2 or len(bottom_edge) < 2:
+        return None
+    # Sort top west-to-east (ascending lon), bottom east-to-west (descending lon)
+    top_sorted = sorted(top_edge, key=lambda p: p[1])
+    bottom_sorted = sorted(bottom_edge, key=lambda p: p[1], reverse=True)
+    perimeter = top_sorted + bottom_sorted
+    if perimeter[0] != perimeter[-1]:
+        perimeter.append(perimeter[0])
+    return perimeter
+
+
+def build_box_four_corners_ring(points: list[tuple[float, float]], crs_epsg: int) -> list[tuple[float, float]] | None:
+    """Form closed ring from four corner points (e.g. box bushes). Assumes CSV order is ring order."""
+    if len(points) != 4:
+        return None
+    ring = list(points)
+    if ring[0] != ring[-1]:
+        ring.append(ring[0])
+    return ring
+
+
+def process_site(
+    site_id: str,
+    points: list[tuple[float, float]],
+    cfg: dict[str, Any],
+    typed_rows: list[tuple[float, float, str]] | None = None,
+) -> dict[str, Any] | None:
     if not points:
         return None
     crs_epsg = cfg.get("crs_epsg", 4326)
@@ -140,12 +207,21 @@ def process_site(site_id: str, points: list[tuple[float, float]], cfg: dict[str,
 
     if len(points) == 1 and is_point:
         ring = buffer_point_meters(points[0][0], points[0][1], BUFFER_M, crs_epsg)
+    elif site_id == "san_lorenzo_plains" and typed_rows:
+        ring = build_plains_ring(typed_rows, crs_epsg)
+        if ring is None:
+            ring = convex_hull_latlon(points, crs_epsg)
+            ring = ring if ring and ring[0] == ring[-1] else (ring + [ring[0]] if ring else None)
+    elif site_id == "san_lorenzo_box_bushes" and len(points) == 4:
+        ring = build_box_four_corners_ring(points, crs_epsg)
     elif len(points) < 3:
         return None
     else:
         hull = convex_hull_latlon(points, crs_epsg)
         ring = hull if hull[0] == hull[-1] else hull + [hull[0]]
 
+    if ring is None:
+        return None
     return build_feature(site_id, ring)
 
 
@@ -178,7 +254,10 @@ def main() -> int:
         site_id = path.stem
         cfg = SITE_CONFIG.get(site_id, {"name": site_id, "crs_epsg": 4326, "is_point": False})
         points = load_waypoints(path)
-        feat = process_site(site_id, points, cfg)
+        typed_rows: list[tuple[float, float, str]] | None = None
+        if site_id in ("san_lorenzo_plains", "san_lorenzo_box_bushes", "san_lorenzo_caves"):
+            typed_rows = load_waypoints_with_types(path)
+        feat = process_site(site_id, points, cfg, typed_rows=typed_rows)
         out_path = out_dir / f"{site_id}_wgs84.geojson"
         if feat is None:
             fc = {"type": "FeatureCollection", "features": []}

@@ -1,0 +1,28 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: San_Lorenzo_UTM
+slug: san_lorenzo_utm
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: GeoCue TrueView 515
+site: san_lorenzo
+mission: san_lorenzo_box_counts_utm
+flight_group: geocue_san_lorenzo
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 32720
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 46073107
+tile_count: 2
+tiles:
+  - box_count_11.10.las
+  - box_count_11.9.las
+notes: Box count tiles in UTM projection (11.9 + 11.10)
+flight_date: 2025-12-11
+las_version: 1.4
+generating_software: PDAL 2.9.3 (Releas)
+system_identifier: PDAL
+sensor_model: None
+sensor_serial: None
+source_las_file: box_count_11.10.las

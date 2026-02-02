@@ -1,0 +1,82 @@
+# Layer Index
+# Generated: 2026-02-02
+# Total layers: 21
+
+## By Flight Date
+
+### 2025-11-09
+  - Caleta Box Count 1: caleta_box_count_1.geojson
+
+### 2025-11-10
+  - Caleta Tiny Island: caleta_tiny_island.geojson
+
+### 2025-11-16
+  - Caleta Small Island: caleta_small_island.geojson
+
+### 2025-11-20
+  - Caleta Box Count 2: caleta_box_count_2.geojson
+  - San Lorenzo Box Count 11.9.25 LAS: san_lorenzo_box_count_11_9_25_las.geojson
+  - San Lorenzo Full LiDAR LAS: san_lorenzo_full_lidar_las.geojson
+
+### 2025-11-24
+  - San Lorenzo Box Count 11.10 LAS: san_lorenzo_box_count_11_10_las.geojson
+
+### 2025-12-11
+  - San_Lorenzo_UTM: san_lorenzo_utm.geojson
+
+## By Sensor/Mission Group
+
+### field_survey_caleta
+  - caleta_box1: (no geometry) (empty)
+  - caleta_box2: (no geometry) (empty)
+  - caleta_small_island: (no geometry) (empty)
+  - caleta_tiny_island: (no geometry) (empty)
+
+### field_survey_san_lorenzo
+  - san_lorenzo_box_bushes: aoi_san_lorenzo_box_bushes.geojson
+  - san_lorenzo_box_caves: (no geometry) (empty)
+  - san_lorenzo_caves: aoi_san_lorenzo_caves.geojson
+  - san_lorenzo_plains: aoi_san_lorenzo_plains.geojson
+  - san_lorenzo_road: (no geometry) (empty)
+
+### geocue_san_lorenzo
+  - San Lorenzo Box Count 11.10 LAS: san_lorenzo_box_count_11_10_las.geojson [2025-11-24]
+  - San Lorenzo Box Count 11.9.25 LAS: san_lorenzo_box_count_11_9_25_las.geojson [2025-11-20]
+  - San Lorenzo Full LiDAR LAS: san_lorenzo_full_lidar_las.geojson [2025-11-20]
+  - San_Lorenzo_UTM: san_lorenzo_utm.geojson [2025-12-11]
+
+### h30t_san_lorenzo
+  - 0076_T: 0076_t.geojson
+  - 0116_T: 0116_t.geojson
+  - 0158_T: 0158_t.geojson
+  - 0197_T: 0197_t.geojson
+
+### l2_caleta
+  - Caleta Box Count 1: caleta_box_count_1.geojson [2025-11-09]
+  - Caleta Box Count 2: caleta_box_count_2.geojson [2025-11-20]
+  - Caleta Small Island: caleta_small_island.geojson [2025-11-16]
+  - Caleta Tiny Island: caleta_tiny_island.geojson [2025-11-10]
+
+## All Layers
+
+- 0076_t: 0076_t.geojson
+- 0116_t: 0116_t.geojson
+- 0158_t: 0158_t.geojson
+- 0197_t: 0197_t.geojson
+- aoi_caleta_box1: (no geometry)
+- aoi_caleta_box2: (no geometry)
+- aoi_caleta_small_island: (no geometry)
+- aoi_caleta_tiny_island: (no geometry)
+- aoi_san_lorenzo_box_bushes: aoi_san_lorenzo_box_bushes.geojson
+- aoi_san_lorenzo_box_caves: (no geometry)
+- aoi_san_lorenzo_caves: aoi_san_lorenzo_caves.geojson
+- aoi_san_lorenzo_plains: aoi_san_lorenzo_plains.geojson
+- aoi_san_lorenzo_road: (no geometry)
+- caleta_box_count_1: caleta_box_count_1.geojson
+- caleta_box_count_2: caleta_box_count_2.geojson
+- caleta_small_island: caleta_small_island.geojson
+- caleta_tiny_island: caleta_tiny_island.geojson
+- san_lorenzo_box_count_11_10_las: san_lorenzo_box_count_11_10_las.geojson
+- san_lorenzo_box_count_11_9_25_las: san_lorenzo_box_count_11_9_25_las.geojson
+- san_lorenzo_full_lidar_las: san_lorenzo_full_lidar_las.geojson
+- san_lorenzo_utm: san_lorenzo_utm.geojson

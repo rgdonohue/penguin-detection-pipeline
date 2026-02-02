@@ -1,0 +1,27 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: Caleta Box Count 2
+slug: caleta_box_count_2
+layer_type: sensor_coverage
+sensor_type: lidar
+sensor: L2 LiDAR
+site: caleta
+mission: caleta_box2
+flight_group: l2_caleta
+source_file: lidar_coverage_wgs84.geojson
+source_crs_epsg: 32720
+output_crs: EPSG:4326 (WGS84)
+geometry_type: MultiPolygon
+point_count: 2356805
+tile_count: 1
+tiles:
+  - cloud0.las
+notes: Mainland box count 2; 12 penguins
+flight_date: 2025-11-20
+las_version: 1.2
+generating_software: LASzip DLL 3.4 r3 (191111)
+system_identifier: REpJLUwxLUJlcnRoYS4=
+sensor_model: None
+sensor_serial: None
+source_las_file: cloud0.las

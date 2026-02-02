@@ -1,9 +1,9 @@
 lat,lon,point_type,description
 -42.086263,-63.874072,start,Start point 1
--42.086285,-63.874350,start,Start point 2
--42.088878,-63.873310,end,End point 1
+-42.086285,-63.87435,start,Start point 2
+-42.088878,-63.87331,end,End point 1
 -42.089107,-63.873427,end,End point 2
 -42.086656,-63.873951,edge,Right edge 1
 -42.087376,-63.873872,edge,Right edge 2
--42.087740,-63.873728,edge,Right edge 3
+-42.08774,-63.873728,edge,Right edge 3
 -42.088702,-63.873419,edge,Right edge 4

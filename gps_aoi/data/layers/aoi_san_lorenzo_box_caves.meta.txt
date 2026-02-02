@@ -1,0 +1,17 @@
+# Layer metadata
+# Generated: 2026-02-02
+
+name: gps_box_caves
+slug: aoi_san_lorenzo_box_caves
+layer_type: gps_aoi
+sensor_type: gps_aoi
+sensor: GPS (field survey)
+site: san_lorenzo
+mission: gps_box_caves
+flight_group: field_survey_san_lorenzo
+source_file: san_lorenzo_box_caves_wgs84.geojson
+output_crs: EPSG:4326 (WGS84)
+geometry_type: EMPTY
+penguin_count: 32
+notes: High Density Caves box count; NO CORNERS IN PDF - boundary data needed
+status: empty

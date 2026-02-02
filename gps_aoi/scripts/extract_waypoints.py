@@ -9,11 +9,14 @@ Usage:
   # Emit empty CSV templates for all sites
   python extract_waypoints.py --templates --out-dir ../data/waypoints
 
+  # Extract waypoints from PDF text and write per-site CSVs
+  python extract_waypoints.py --from-pdf-text ../data/raw/pdf_extract.txt --out-dir ../data/waypoints
+
   # Validate and normalize an existing CSV
   python extract_waypoints.py --validate ../data/waypoints/san_lorenzo_caves.csv
 
-  # Parse DMS line like "42°05'12.3\"S 63°52'20.1\"W" to decimal
-  python extract_waypoints.py --parse-dms "42°05'12.3\"S 63°52'20.1\"W"
+  # Parse DMS or decimal+hemisphere line to decimal degrees
+  python extract_waypoints.py --parse-dms "42.085273 S, 63.866958 W"
 """
 
 from __future__ import annotations
@@ -254,8 +257,7 @@ def extract_waypoints_from_pdf_text(text: str) -> dict[str, list[tuple[float, fl
                                 lon = -63.870152  # typo fix
                             bottom_edge.append((lat, lon, "bottom_edge", f"Bottom edge {len(bottom_edge) + 1}"))
                         if section == "top_edge":
-                            top_edge.append(
-                                (lat, lon, "top_edge", f"Top edge {len(top_edge) + 1}")
+                            top_edge.append((lat, lon, "top_edge", f"Top edge {len(top_edge) + 1}"))
                 i += 1
             result["san_lorenzo_plains"].extend(top_edge)
             result["san_lorenzo_plains"].extend(bottom_edge)
