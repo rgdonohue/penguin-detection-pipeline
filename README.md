@@ -63,16 +63,16 @@ These are candidate counts, not confirmed penguin identifications. Precision est
 
 Beyond geometric filtering, per-detection spectral features were extracted to assess detection quality and provide evidence for the question "how do we know these are penguins?"
 
-**Key finding:** Inside-AOI detections have a remarkably consistent spectral signature — 86% of Caleta Tiny Island detections form a tight core with consistent NIR intensity, warm-toned RGB, and near-zero greenness. This homogeneity is not explained by the pipeline's geometric filters (morphological features show no inside/outside difference) and provides independent evidence that detections represent a single object class.
+**Key finding:** Inside-AOI detections have a remarkably consistent spectral signature — 86% of Caleta Tiny Island detections form a tight core with consistent NIR intensity, warm-toned RGB, and near-zero greenness. This homogeneity is not explained by the pipeline's geometric filters (morphological features show no inside/outside difference) and provides supporting evidence that detections represent a single object class. Confirmation that the core consists of true penguins requires manual labeling, which is in progress.
 
 | Feature | Discriminative Power | Cross-site / Cross-sensor |
 |---------|---------------------|--------------------------|
 | Intensity (NIR) | Strong within-site | Poor — site-specific and sensor-locked |
 | Greenness (G−R)/(G+R) | Moderate | Good — consistent near-zero across sites and sensors |
 | Color warmth (R−B) | Moderate | Unknown |
-| Multi-return fraction | None | None — <1% multi-return even on TrueView 515 |
+| Multi-return fraction | Weak | Median 0%, mean <1% on TrueView 515; 18% of detections >1% |
 
-Parameter sensitivity analysis shows **hag_max is the dominant parameter** — detection counts vary 3–4× more with the upper height bound than with any other parameter. Full analysis in `docs/reports/FEATURE_ANALYSIS.md`.
+Parameter sensitivity analysis shows **hag_max is the dominant parameter** — detection counts vary 3–4× more with the upper height bound than with any other parameter at Caleta (DJI L2). At San Lorenzo (TrueView 515), hag_min also shows moderate sensitivity (36% variation). Full analysis in `docs/reports/FEATURE_ANALYSIS.md`.
 
 ## Current Status
 

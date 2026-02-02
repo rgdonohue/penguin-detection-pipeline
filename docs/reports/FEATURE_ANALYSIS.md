@@ -58,7 +58,7 @@ San Lorenzo (TrueView 515) detections were extracted from a single box-count til
 
 **San Lorenzo has wider feature spreads.** All features (intensity, RGB, greenness) show broader distributions at San Lorenzo, consistent with higher false positive contamination in an environment with more diverse ground cover (vegetation, rock, bare soil) compared to the simpler island topography at Caleta.
 
-**Multi-return fraction is negligible.** TrueView 515 supports multi-return, but in practice only 0.2–0.8% of points per detection have multiple returns. This feature is uninformative for both sensors.
+**Multi-return fraction is low on average but has a non-trivial tail.** TrueView 515 supports multi-return; the median multi-return fraction per detection is 0% and the mean is 0.6%, but 18.4% of detections exceed 1% and the maximum is ~10%. DJI L2 is single-return only. The low central tendency and high zero-inflation make this feature a weak discriminator overall, though the tail warrants investigation after labels are available.
 
 ## Parameter Sensitivity
 
@@ -94,23 +94,23 @@ San Lorenzo shows the same pattern: hag_max is the dominant parameter. But the o
 | Greenness index | Moderate | Good — consistent near-zero signature | Good — similar distributions across sensors |
 | Color warmth (R−B) | Moderate | Unknown — needs more sites | Unknown |
 | RGB brightness | Weak | Poor — highly flight-dependent | Poor — sensor-dependent |
-| Multi-return fraction | None (DJI L2 single-return) | N/A | None — <1% multi-return even on TrueView 515 |
+| Multi-return fraction | None (DJI L2 single-return) | N/A | Weak — median 0%, mean <1% on TrueView 515; 18% of detections >1% |
 | Morphological (HAG, area, shape) | None | N/A — pre-filtered by pipeline | N/A |
 
 ## Implications
 
-1. **For the client question "how do we know these are penguins?"** — The feature analysis shows that inside-AOI detections have a remarkably consistent spectral signature (tight intensity, warm RGB, near-zero greenness). This consistency is not guaranteed by the pipeline's geometric filters; it provides independent evidence that the detections represent a single object class.
+1. **For the client question "how do we know these are penguins?"** — The feature analysis shows that inside-AOI detections have a remarkably consistent spectral signature (tight intensity, warm RGB, near-zero greenness). This consistency is not guaranteed by the pipeline's geometric filters; it provides supporting evidence that the detections represent a single object class. However, this comparison is between inside-AOI (a TP/FP mix) and outside-AOI (presumed non-penguins) — confirmation that the inside-AOI core consists of true penguins requires manual labeling, which is in progress.
 
 2. **A per-site anomaly detector is feasible.** Flagging detections that are outliers in intensity, greenness, or color could identify likely false positives without labeled training data. This would not replace manual precision auditing, but could prioritize candidates for review.
 
 3. **A cross-site classifier would need normalization.** Raw feature values differ substantially between sites. Relative features (greenness, color ratios) transfer better than absolute values (intensity, brightness).
 
-4. **Return count is not useful.** The DJI L2 was flown in single-return mode — all detections have single_return_fraction = 1.0. This feature is uninformative for this dataset.
+4. **Return count has limited utility.** The DJI L2 was flown in single-return mode (uninformative). TrueView 515 has multi-return capability, but the median per-detection multi-return fraction is 0% (mean 0.6%). An 18% tail exceeding 1% may correlate with vegetation or other non-penguin features — worth revisiting after labels are available.
 
 ## Outputs
 
 - Feature plots: `qc/panels/caleta_tiny_feature_analysis.png`, `qc/panels/caleta_cross_site_features.png`, `qc/panels/cross_sensor_feature_comparison.png`
-- Enriched detection JSONs: `data/interim/tiny_best_enriched.json`, `data/interim/caleta_small_enriched.json`, `data/interim/san_lorenzo_box_enriched.json`
+- Enriched detection JSONs (RGB, intensity, greenness_index; San Lorenzo also includes multi_return_fraction): `data/interim/tiny_best_enriched.json`, `data/interim/caleta_small_enriched.json`, `data/interim/san_lorenzo_box_enriched.json`
 - Parameter sweep results: `qc/panels/parameter_sensitivity/` (Caleta Tiny), `qc/panels/parameter_sensitivity_san_lorenzo/` (San Lorenzo)
 - Label sample bundles (80 detections each, RGB+HAG crops):
   - `data/processed/label_samples/caleta_tiny_island/`

@@ -46,7 +46,7 @@ def wilson_ci(
 
 def compute_precision_from_labels(label_csv: Path) -> Dict:
     """Read a label CSV and compute precision statistics."""
-    counts = {"TP": 0, "FP_rock": 0, "FP_vegetation": 0, "FP_burrow_empty": 0, "uncertain": 0, "other": 0}
+    counts = {"TP": 0, "FP_rock": 0, "FP_vegetation": 0, "FP_burrow": 0, "uncertain": 0, "other": 0}
     total_labeled = 0
     unlabeled = 0
 
@@ -64,7 +64,7 @@ def compute_precision_from_labels(label_csv: Path) -> Dict:
                 counts["other"] += 1
 
     tp = counts["TP"]
-    fp = counts["FP_rock"] + counts["FP_vegetation"] + counts["FP_burrow_empty"] + counts["other"]
+    fp = counts["FP_rock"] + counts["FP_vegetation"] + counts["FP_burrow"] + counts["other"]
     n_classified = tp + fp  # excludes uncertain
 
     precision = tp / n_classified if n_classified > 0 else None
