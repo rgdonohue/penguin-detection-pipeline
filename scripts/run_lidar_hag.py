@@ -192,6 +192,140 @@ def _stream_points(las_path: Path, chunk_size: int, include_intensity: bool = Fa
                 start += count
 
 
+def _read_extra_fields(pts, field_name: str) -> Optional[np.ndarray]:
+    """Safely read an optional LAS field, returning None if absent."""
+    try:
+        arr = np.asarray(getattr(pts, field_name))
+        return arr
+    except (AttributeError, Exception):
+        return None
+
+
+def _build_enrichment_grids(
+    las_path: Path,
+    chunk_size: int,
+    mins: np.ndarray,
+    cell_res: float,
+    ny: int,
+    nx: int,
+    include_intensity: bool = True,
+    include_rgb: bool = True,
+    include_returns: bool = True,
+    verbose: bool = False,
+) -> Dict[str, Optional[np.ndarray]]:
+    """Build per-cell grids for intensity, RGB, and return count in one streaming pass.
+
+    Returns a dict of grids, each (ny, nx) float32 or None if the field was
+    unavailable in the LAS file.  Grid keys:
+
+    - ``intensity``: mean intensity per cell
+    - ``rgb_r``, ``rgb_g``, ``rgb_b``: mean red/green/blue per cell (uint16 scale)
+    - ``single_return_fraction``: fraction of points per cell where
+      number_of_returns == 1 (solid surface indicator)
+    """
+    n_cells = ny * nx
+    # Accumulator arrays — only allocate what we need
+    cnt = np.zeros(n_cells, dtype=np.int32)
+
+    if include_intensity:
+        intensity_sum = np.zeros(n_cells, dtype=np.float64)
+    if include_rgb:
+        r_sum = np.zeros(n_cells, dtype=np.float64)
+        g_sum = np.zeros(n_cells, dtype=np.float64)
+        b_sum = np.zeros(n_cells, dtype=np.float64)
+        rgb_available = None  # determined on first chunk
+    if include_returns:
+        single_cnt = np.zeros(n_cells, dtype=np.int32)
+        returns_available = None
+
+    with laspy.open(str(las_path)) as fh:
+        for pts in fh.chunk_iterator(chunk_size):
+            x = np.asarray(pts.x, dtype=np.float64)
+            y = np.asarray(pts.y, dtype=np.float64)
+            if not x.size:
+                continue
+            ix = np.floor((x - mins[0]) / cell_res).astype(np.int64)
+            iy = np.floor((y - mins[1]) / cell_res).astype(np.int64)
+            valid = (ix >= 0) & (iy >= 0) & (ix < nx) & (iy < ny)
+            if not np.any(valid):
+                continue
+            flat = (iy[valid] * nx + ix[valid])
+            np.add.at(cnt, flat, 1)
+
+            if include_intensity:
+                i_arr = _read_extra_fields(pts, "intensity")
+                if i_arr is not None:
+                    np.add.at(intensity_sum, flat, i_arr[valid].astype(np.float64))
+
+            if include_rgb and rgb_available is not False:
+                r_arr = _read_extra_fields(pts, "red")
+                g_arr = _read_extra_fields(pts, "green")
+                b_arr = _read_extra_fields(pts, "blue")
+                if r_arr is not None and g_arr is not None and b_arr is not None:
+                    rgb_available = True
+                    np.add.at(r_sum, flat, r_arr[valid].astype(np.float64))
+                    np.add.at(g_sum, flat, g_arr[valid].astype(np.float64))
+                    np.add.at(b_sum, flat, b_arr[valid].astype(np.float64))
+                else:
+                    rgb_available = False
+                    if verbose:
+                        print(f"    {las_path.name}: RGB fields not found in LAS; skipping.", file=sys.stderr)
+
+            if include_returns and returns_available is not False:
+                nr = _read_extra_fields(pts, "number_of_returns")
+                if nr is not None:
+                    returns_available = True
+                    is_single = (nr[valid] == 1)
+                    np.add.at(single_cnt, flat, is_single.astype(np.int32))
+                else:
+                    returns_available = False
+                    if verbose:
+                        print(f"    {las_path.name}: number_of_returns not found; skipping.", file=sys.stderr)
+
+    # Convert accumulators to mean grids
+    result: Dict[str, Optional[np.ndarray]] = {}
+    cnt_2d = cnt.reshape(ny, nx)
+    has_data = cnt_2d > 0
+
+    if include_intensity:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            igrid = np.where(has_data, (intensity_sum.reshape(ny, nx) / np.maximum(cnt_2d, 1)).astype(np.float32), np.float32(0))
+        result["intensity"] = igrid
+        if not np.any(has_data) or float(np.max(intensity_sum)) == 0.0:
+            print(f"WARNING: {las_path.name}: intensity data is all zeros; "
+                  f"LAS file may lack intensity values.", file=sys.stderr)
+    else:
+        result["intensity"] = None
+
+    if include_rgb and rgb_available:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            denom = np.maximum(cnt_2d, 1).astype(np.float64)
+            result["rgb_r"] = np.where(has_data, (r_sum.reshape(ny, nx) / denom).astype(np.float32), np.float32(0))
+            result["rgb_g"] = np.where(has_data, (g_sum.reshape(ny, nx) / denom).astype(np.float32), np.float32(0))
+            result["rgb_b"] = np.where(has_data, (b_sum.reshape(ny, nx) / denom).astype(np.float32), np.float32(0))
+    else:
+        result["rgb_r"] = result["rgb_g"] = result["rgb_b"] = None
+
+    if include_returns and returns_available:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            result["single_return_fraction"] = np.where(
+                has_data,
+                (single_cnt.reshape(ny, nx) / np.maximum(cnt_2d, 1)).astype(np.float32),
+                np.float32(0),
+            )
+    else:
+        result["single_return_fraction"] = None
+
+    if verbose:
+        for key, grid in result.items():
+            if grid is not None and np.any(has_data):
+                vals = grid[has_data]
+                print(f"    {key} grid: mean={float(np.mean(vals)):.1f}, "
+                      f"range=[{float(np.min(vals)):.1f}, {float(np.max(vals)):.1f}]", flush=True)
+
+    return result
+
+
 def _grid_shape(mins: np.ndarray, maxs: np.ndarray, cell_res: float) -> Tuple[int, int]:
     nx = int(np.ceil((maxs[0] - mins[0]) / cell_res)) + 1
     ny = int(np.ceil((maxs[1] - mins[1]) / cell_res)) + 1
@@ -896,6 +1030,7 @@ def process_file(las_path: Path,
                  max_grid_mb: Optional[float] = None,
                  skip_oversized_tiles: bool = False,
                  extract_intensity: bool = False,
+                 extract_features: bool = False,
                  compute_confidence: bool = False) -> Dict:
     """Process a single LAS/LAZ tile: build DEM, compute HAG, detect candidates.
 
@@ -959,38 +1094,19 @@ def process_file(las_path: Path,
         slope_rad = np.arctan(np.hypot(gx, gy))
         slope_arr = np.degrees(slope_rad).astype(np.float32)
 
-    # Optional intensity grid (mean intensity per cell)
-    intensity_grid: Optional[np.ndarray] = None
-    if extract_intensity:
-        intensity_sum = np.zeros((ny, nx), dtype=np.float64)
-        intensity_cnt = np.zeros((ny, nx), dtype=np.int32)
-        for x, y, z, intensity in _stream_points(las_path, chunk_size, include_intensity=True):
-            ix, iy, mask = _bin_indices(x, y, np.array(meta["mins"]), cell_res, ny, nx)
-            if not np.any(mask):
-                continue
-            i_valid = intensity[mask]
-            flat = (iy * nx + ix)
-            if flat.size:
-                np.add.at(intensity_sum.ravel(), flat, i_valid.astype(np.float64))
-                np.add.at(intensity_cnt.ravel(), flat, 1)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            intensity_grid = np.where(
-                intensity_cnt > 0,
-                (intensity_sum / intensity_cnt.astype(np.float64)).astype(np.float32),
-                np.float32(0.0),
-            )
-        if not np.any(intensity_cnt > 0) or float(np.max(intensity_sum)) == 0.0:
-            print(
-                f"WARNING: {las_path.name}: intensity data is all zeros; "
-                f"LAS file may lack intensity values. Intensity features will be empty.",
-                file=sys.stderr,
-            )
-        if verbose:
-            valid = intensity_cnt > 0
-            if valid.any():
-                print(f"    Intensity grid: mean={float(np.mean(intensity_grid[valid])):.1f}, "
-                      f"range=[{float(np.min(intensity_grid[valid])):.0f}, {float(np.max(intensity_grid[valid])):.0f}]",
-                      flush=True)
+    # Feature enrichment pass — build per-cell grids for intensity, RGB, return count
+    do_enrichment = extract_features or extract_intensity
+    enrichment_grids: Dict[str, Optional[np.ndarray]] = {}
+    if do_enrichment:
+        enrichment_grids = _build_enrichment_grids(
+            las_path, chunk_size,
+            mins=np.array(meta["mins"]),
+            cell_res=cell_res, ny=ny, nx=nx,
+            include_intensity=True,
+            include_rgb=extract_features,
+            include_returns=extract_features,
+            verbose=verbose,
+        )
 
     count, labeled, dets = detect_penguins_from_hag(
         hag, hag_min, hag_max, min_area_cells, max_area_cells,
@@ -1008,20 +1124,52 @@ def process_file(las_path: Path,
         border_trim_px=border_trim_px,
     )
 
-    # Enrich detections with intensity features if grid is available
-    if intensity_grid is not None and dets:
-        intensity_props = measure.regionprops(labeled, intensity_image=intensity_grid)
-        label_to_intensity = {}
-        for rp in intensity_props:
-            label_to_intensity[rp.label] = {
-                "intensity_mean": float(rp.mean_intensity),
-                "intensity_min": float(rp.min_intensity),
-                "intensity_max": float(rp.max_intensity),
-            }
-        for d in dets:
-            lbl = d.get("label")
-            if lbl in label_to_intensity:
-                d.update(label_to_intensity[lbl])
+    # Enrich detections with features from enrichment grids
+    if dets and do_enrichment:
+        # Intensity (mean/min/max per blob — existing behavior)
+        igrid = enrichment_grids.get("intensity")
+        if igrid is not None:
+            intensity_props = measure.regionprops(labeled, intensity_image=igrid)
+            label_to_intensity = {}
+            for rp in intensity_props:
+                label_to_intensity[rp.label] = {
+                    "intensity_mean": float(rp.mean_intensity),
+                    "intensity_min": float(rp.min_intensity),
+                    "intensity_max": float(rp.max_intensity),
+                }
+            for d in dets:
+                lbl = d.get("label")
+                if lbl in label_to_intensity:
+                    d.update(label_to_intensity[lbl])
+
+        # RGB mean per blob (one regionprops call per channel)
+        for grid_key, det_key in [("rgb_r", "rgb_r_mean"), ("rgb_g", "rgb_g_mean"), ("rgb_b", "rgb_b_mean")]:
+            grid = enrichment_grids.get(grid_key)
+            if grid is not None:
+                rgb_props = measure.regionprops(labeled, intensity_image=grid)
+                label_to_val = {rp.label: float(rp.mean_intensity) for rp in rgb_props}
+                for d in dets:
+                    lbl = d.get("label")
+                    if lbl in label_to_val:
+                        d[det_key] = label_to_val[lbl]
+
+        # Single-return fraction per blob (mean of per-cell fractions)
+        srf_grid = enrichment_grids.get("single_return_fraction")
+        if srf_grid is not None:
+            srf_props = measure.regionprops(labeled, intensity_image=srf_grid)
+            label_to_srf = {rp.label: float(rp.mean_intensity) for rp in srf_props}
+            for d in dets:
+                lbl = d.get("label")
+                if lbl in label_to_srf:
+                    d["single_return_fraction"] = label_to_srf[lbl]
+
+    # HAG height profile per blob (std dev of HAG within each detection)
+    if dets and extract_features:
+        from scipy.ndimage import labeled_comprehension
+        det_labels = [d["label"] for d in dets]
+        hag_stds = labeled_comprehension(hag, labeled, det_labels, np.std, float, 0.0)
+        for d, std_val in zip(dets, hag_stds):
+            d["hag_std"] = float(std_val)
 
     # Optional confidence scoring
     if compute_confidence and dets:
@@ -1218,6 +1366,9 @@ def main() -> None:
     parser.add_argument("--slope-max-deg", type=float, default=None, help="Drop candidates where ground slope exceeds this many degrees")
     parser.add_argument("--dedupe-radius-m", type=float, default=None, help="If set, de-duplicate detections across tiles within this radius (meters)")
     parser.add_argument("--extract-intensity", action="store_true", help="Build per-cell mean intensity grid and add intensity features to detections")
+    parser.add_argument("--extract-features", action="store_true",
+                        help="Extract all available per-detection features: intensity (905nm), RGB color, "
+                             "single-return fraction, and HAG height profile.  Superset of --extract-intensity.")
     parser.add_argument("--compute-confidence", action="store_true", help="Compute a [0,1] confidence score per detection based on HAG, area, and shape features")
 
     args = parser.parse_args()
@@ -1399,6 +1550,7 @@ def main() -> None:
                 max_grid_mb=args.max_grid_mb,
                 skip_oversized_tiles=args.skip_oversized_tiles,
                 extract_intensity=args.extract_intensity,
+                extract_features=args.extract_features,
                 compute_confidence=args.compute_confidence,
             )
         except Exception as exc:
