@@ -28,10 +28,10 @@ Project: Penguin Detection Pipeline v4.0
 
 **Island colony monitoring is viable now.** At detection rates of 0.81–0.98 and expected precision of 85–95%, LiDAR can produce penguin count estimates for open island colonies that are comparable to manual field counts. Once the precision audit is complete, candidate counts can be adjusted by the measured precision to produce calibrated estimates with confidence intervals.
 
-**Mainland burrow sites need a different approach.** LiDAR detects visible (above-ground) penguins reliably, but physically cannot detect penguins inside burrows. For sites like San Lorenzo Caves, operational counting would require either:
-- LiDAR + thermal fusion (thermal can detect body heat through burrow openings — infrastructure exists but calibration is unresolved)
-- LiDAR count × burrow correction factor (derived from thermal sampling or field observations)
-- Thermal-only detection at burrow sites
+**Mainland burrow sites need a different approach.** LiDAR detects visible (above-ground) penguins reliably, but physically cannot detect penguins inside burrows. We tested whether thermal imaging could fill this gap — it cannot, at least not with oblique camera angles at burrow sites (see "Thermal–LiDAR Cross-Reference" below). For sites like San Lorenzo Caves, operational counting would require either:
+- LiDAR count × burrow correction factor (derived from field observations of burrow occupancy rates)
+- Nadir thermal collection targeting burrow openings (untested — would require a separate data collection)
+- Direct field counts at burrow-heavy sites, with LiDAR covering open areas
 
 **The greenness index transfers across sites and sensors.** This is relevant for scaling: the (G−R)/(G+R) signature of penguin detections is consistent across both DJI L2 and TrueView 515 sensors and across all tested sites. Intensity values are sensor-locked and do not transfer.
 
@@ -69,9 +69,24 @@ Detailed request with specific coordinate questions: `notes/client_aoi_clarifica
 | Precision estimates with confidence intervals | Pending labeling |
 | Validated per-site count table | Pending labeling + AOI confirmation |
 
+## Thermal–LiDAR Cross-Reference (San Lorenzo)
+
+We georeferenced 28 thermal labels (12 "Penguin in Burrow", 9 "Penguin Deep in Burrow", 7 "Empty Burrow") from the San Lorenzo Bushes box count area and cross-referenced them against LiDAR detections. Key findings:
+
+- **LiDAR recall at burrow sites:** 9/21 (43%) of thermally-labeled penguins have a LiDAR detection within 2 m. 6/12 shallow penguins detected vs 3/9 deep penguins — consistent with LiDAR detecting above-ground signatures only.
+- **Precision in reference box:** 7/7 LiDAR detections inside the 14 m × 14 m reference box are within 2 m of a labeled penguin (100% local precision, n=7).
+- **Empty burrows cause false positives:** 4/7 (57%) empty burrows have a nearby LiDAR detection, confirming burrow rims as a false positive source.
+
+We also tested whether **thermal brightness** (without absolute calibration) could help discriminate penguins from empty burrows. It cannot — at least not with oblique thermal views at burrow sites. Shallow penguins are only +0.6°C above background with high variance, and empty burrows are also warmer than background (+0.4°C), confounding the signal. Cohen's d = 0.04 (negligible). The physical reason: at 45° oblique pitch, the camera sees burrow rims, not penguin bodies.
+
 ## What's Not Being Worked On
 
-Thermal detection and LiDAR–thermal fusion are **not operational and not in active development** for this project phase. The thermal extraction infrastructure works (16-bit radiometric), but temperature calibration has unresolved offsets (~9°C) and thermal detection F1 is 0.02–0.30. Resolving this would require a separate focused effort.
+Thermal detection and LiDAR–thermal fusion are **not operational and not in active development** for this project phase. The thermal extraction infrastructure works (16-bit radiometric), but:
+- Temperature calibration has unresolved offsets (~9°C)
+- Thermal detection F1 is 0.02–0.30
+- A discrimination proof of concept confirmed that oblique thermal views at burrow sites do not distinguish penguins from empty burrows (details above)
+
+Thermal fusion might work at open-colony sites where penguins stand exposed on rock, but we have no labeled thermal data there to test. Pursuing this would require a separate focused effort with nadir thermal collection.
 
 ## Repo Quick Start
 
@@ -79,4 +94,5 @@ Thermal detection and LiDAR–thermal fusion are **not operational and not in ac
 - Current state: `docs/reports/STATUS.md`
 - LiDAR methodology: `docs/reports/LIDAR_METHODOLOGY.md`
 - Feature analysis: `docs/reports/FEATURE_ANALYSIS.md`
+- Thermal–LiDAR cross-reference: `docs/reports/THERMAL_LIDAR_CROSSREF.md`
 - Labeling protocol: `docs/process/LABELING_PROTOCOL.md`

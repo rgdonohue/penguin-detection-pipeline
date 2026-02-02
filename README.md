@@ -23,7 +23,7 @@ Detection counts compared to field observations at four Argentina 2025 sites:
 
 Point clouds are normalized to height above ground (HAG), rasterized to a 0.25 m grid, and filtered to the 0.2–0.6 m height band (standing Magellanic penguin height). Connected-component analysis extracts blob candidates, and morphological filters remove objects outside the 0.125–5.0 m² size range. The pipeline is deterministic and regression-tested against a baseline dataset.
 
-Thermal detection and LiDAR–thermal fusion were explored but are not operational. Thermal extraction infrastructure works (16-bit radiometric), but temperature calibration has unresolved offsets and detection F1 is 0.02–0.30. These are not being developed further in the current project phase.
+Thermal detection and LiDAR–thermal fusion were explored but are not operational. Thermal extraction infrastructure works (16-bit radiometric), but a discrimination proof of concept showed that oblique thermal views at burrow sites do not distinguish penguins from empty burrows (Cohen's d = 0.04). Temperature calibration has unresolved offsets and detection F1 is 0.02–0.30. These are not being developed further in the current project phase.
 
 ## Study Sites
 

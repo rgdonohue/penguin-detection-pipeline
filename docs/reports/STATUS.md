@@ -110,12 +110,18 @@ Last updated: 2026-02-02 UTC
 - Manual labeling in progress using `docs/process/LABELING_PROTOCOL.md`
 
 ### 3. Thermal Detection
-**Status:** RESEARCH PHASE
+**Status:** RESEARCH PHASE — DISCRIMINATION POC NEGATIVE
 
 - F1 scores: 0.02-0.30 depending on frame contrast
-- Parameter optimization scripts exist but not validated
-- Batch processing not implemented
-- Calibration must be resolved before production use
+- **Thermal discrimination proof of concept (2026-02-02):** Tested whether relative thermal brightness (without absolute calibration) can separate penguins from empty burrows at the San Lorenzo Bushes box count site. Used direct pixel sampling from 4 labeled H30T thermal images (111 labels across 3 categories, all at -45° oblique pitch).
+  - **Result: negligible discrimination.** Cohen's d = 0.035 (penguin vs empty burrow), d = 0.22 (shallow penguin vs empty burrow). Empty burrows are also warmer than background (+0.37°C), confounding the signal.
+  - **Shallow penguins** ("Penguin in Burrow"): +0.6°C above background, but std 1.2°C — not individually reliable
+  - **Deep penguins** ("Penguin Deep in Burrow"): +0.13°C, indistinguishable from background
+  - **Physical reason:** At 45° oblique pitch, the camera sees burrow rims and openings, not penguin bodies. Thermal signature is dominated by cavity geometry.
+  - **LiDAR-thermal fusion test:** LiDAR detections projected into thermal frames show no enrichment for warm pixels (Cohen's d = -0.17 vs unmatched). Top 10% hottest LiDAR detections contain 0 penguin-matched points.
+  - Full results: `data/interim/thermal_discrimination_poc.json`
+- **Implication:** Thermal fusion is not viable at oblique-view burrow sites. Nadir thermal views or open-colony sites (standing penguins on rock) might show stronger signal — untested.
+- Calibration must be resolved before any production thermal use
 
 ---
 
@@ -128,11 +134,12 @@ Last updated: 2026-02-02 UTC
 | LiDAR Label Samples | Generated (2 × 80 samples) | High | Manual labeling in progress |
 | LiDAR Tests | Passing | High | None |
 | Thermal Extraction | Working | Medium | Calibration offset |
-| Thermal Detection | Research | Low | F1 < 0.1 on most frames |
+| Thermal Detection | Research (POC negative) | Low | Oblique views lack discrimination; F1 < 0.1 |
 | Thermal Tests | Passing | Medium | Data/GDAL availability |
-| Fusion | Partial | Medium | Thermal detections need CRS `x/y` |
+| Thermal Discrimination POC | Complete (negative) | High | Oblique views at burrow sites do not discriminate |
+| Fusion | Partial | Medium | Thermal detections need CRS `x/y`; discrimination POC negative |
 | Ground Truth (legacy) | 44% | Medium | Manual annotation needed |
-| Ground Truth (Argentina) | 0% | — | Georeferencing needed |
+| Ground Truth (Argentina) | Thermal labels georeferenced | Medium | LiDAR cross-ref done; 43% recall at 2m |
 
 ---
 
@@ -159,19 +166,17 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 
 6. **Manual labeling** of label sample bundles → precision estimation via `scripts/estimate_precision.py`
 7. **Feature-by-label analysis** — after labels, plot TP vs FP feature distributions
-8. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
-9. **Resolve thermal calibration** — address the documented offsets before operational use
+8. ~~**Thermal discrimination POC**~~ — ✅ Done (negative result): oblique thermal at burrow sites does not discriminate penguins from empty burrows
 
 ### Short-term
 
 10. Complete legacy ground truth (4 frames, 77 penguins)
-11. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
-12. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
+11. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
 
 ### Medium-term
 
 13. Georeference Argentina GPS waypoints
-14. Resolve thermal calibration (investigate 9°C and 30°C offsets)
+14. Resolve thermal calibration (investigate 9°C and 30°C offsets) — lower priority after negative discrimination POC
 15. Ground model experiment — compare `min` vs `p05` vs CSF on same data with AOI clipping
 
 ---

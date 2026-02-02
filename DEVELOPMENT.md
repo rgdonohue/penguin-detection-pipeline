@@ -57,4 +57,5 @@ The pipeline produces several output types, stored in `data/processed/` and `qc/
 | [docs/reports/LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md) | Algorithm documentation |
 | [docs/reports/LIDAR_VALIDATION.md](docs/reports/LIDAR_VALIDATION.md) | AOI-clipped validation results |
 | [docs/reports/FEATURE_ANALYSIS.md](docs/reports/FEATURE_ANALYSIS.md) | Per-detection feature analysis and parameter sensitivity |
+| [docs/reports/THERMAL_LIDAR_CROSSREF.md](docs/reports/THERMAL_LIDAR_CROSSREF.md) | Thermal georeferencing, LiDAR cross-reference, thermal discrimination POC |
 | [docs/process/LABELING_PROTOCOL.md](docs/process/LABELING_PROTOCOL.md) | Manual labeling protocol for precision estimation |
