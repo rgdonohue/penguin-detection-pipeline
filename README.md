@@ -2,9 +2,13 @@
 
 Automated detection of Magellanic penguins from drone survey data, developed in collaboration with the [Conservation Technology Alliance](https://www.conservationta.org/). The pipeline processes LiDAR point clouds and thermal imagery collected by drone to identify and count penguins across breeding colonies in Patagonia, Argentina.
 
+## Current Focus (Feb 2026)
+
+**LiDAR detection is the active workstream.** Thermal processing and LiDAR–thermal fusion are paused while we resolve AOI boundary definitions and complete LiDAR validation for the 2025 Argentina surveys.
+
 ## Project Goal
 
-Manual counting of penguin colonies is labor-intensive and limited in scale. This project develops a reproducible, sensor-fusion approach to estimate penguin populations from aerial surveys. The pipeline identifies penguin-sized objects in LiDAR height data, extracts thermal signatures from infrared imagery, and combines both sources for validated counts. The aim is a field-deployable tool that conservation teams can run on standard survey data to produce population estimates with documented precision.
+Manual counting of penguin colonies is labor-intensive and limited in scale. This project develops a reproducible method to detect penguin candidates from aerial LiDAR surveys. The pipeline identifies penguin-sized above-ground objects in LiDAR height data and compares candidate counts to field observations. Thermal detection and sensor fusion were explored but are not yet operational (see [Current Status](#current-status)).
 
 ## Study Sites (Argentina 2025)
 
@@ -24,45 +28,67 @@ Surveys used DJI drones with LiDAR sensors (DJI L2, TrueView 515) and thermal ca
 
 ## How It Works
 
-The pipeline has three stages.
+The pipeline was designed as a three-stage workflow. As of Feb 2026, only the LiDAR stage is tested and in active use.
 
 **LiDAR Detection.** Point clouds are normalized to height above ground (HAG), rasterized to a 0.25 m grid, and filtered to the 0.2–0.6 m height band (the expected standing height of Magellanic penguins). Connected-component analysis extracts blob candidates, and morphological filters remove objects outside the 0.125–5.0 m² size range. This stage is deterministic — the same input always produces the same output — and is regression-tested against a baseline dataset.
 
-**Thermal Processing.** Full 16-bit radiometric temperatures are extracted from DJI thermal JPEG files. Frames are orthorectified (projected onto terrain) using camera pose metadata and a digital surface model. This stage is functional but has an unresolved temperature calibration offset that prevents reliable biological detection thresholds.
+**Thermal Processing (paused).** Full 16-bit radiometric temperatures can be extracted from DJI thermal JPEG files, and single-frame orthorectification utilities exist. However, temperature calibration and field-valid georeferencing are not yet sufficient for operational counting; treat this as research-only.
 
-**Fusion.** LiDAR and thermal detections are spatially joined using nearest-neighbor matching. Each detection is labeled as LiDAR-only, thermal-only, or confirmed by both sensors. This stage is partially implemented; full integration depends on resolving thermal georeferencing.
+**Fusion (paused).** A spatial join exists for combining LiDAR and thermal detections, but it requires thermal data to be georeferenced into the same coordinate system as LiDAR, which is not yet done.
 
 ## Results So Far
 
-LiDAR detection has been validated against field counts at four sites. Results are expressed as candidate-to-field-count ratios — the proportion of field-counted penguins that the pipeline produces candidate detections for within a defined area of interest (AOI).
+LiDAR detection has been compared against field counts at four sites. Results are expressed as candidate-to-field-count ratios — the number of pipeline candidates divided by the field count within a defined area of interest (AOI). These ratios are not precision or recall in the statistical sense; a precision audit (manual labeling of candidate samples) has not yet been completed.
 
-| Site | Field Count | LiDAR Candidates | Ratio | AOI Source |
-|------|------------|-------------------|-------|------------|
-| Caleta Tiny Island | 321 | 315 | 0.98 | LiDAR footprint |
-| Caleta Small Island | 1,557 | 1,255 | 0.81 | LiDAR footprint |
-| San Lorenzo Caves | 908 | 263 | 0.29 | GPS waypoints (approximate) |
-| San Lorenzo Plains | 453 | 86 | 0.19 | GPS waypoints (approximate) |
+| Site | Field Count | LiDAR Candidates | Ratio | AOI Source | AOI Quality |
+|------|------------|-------------------|-------|------------|-------------|
+| Caleta Tiny Island | 321 | 315 | 0.98 | LiDAR footprint (Otsu threshold) | Good — island boundary; AOI area 0.53 ha vs reported 0.7 ha |
+| Caleta Small Island | 1,557 | 1,255 | 0.81 | LiDAR footprint | Moderate — some shoreline edge effects |
+| San Lorenzo Caves | 908 | 263 | 0.29 | GPS waypoints (convex hull) | Uncertain — see below |
+| San Lorenzo Plains | 453 | 86 | 0.19 | GPS waypoints (perimeter winding) | Uncertain — see below |
 
-**Interpreting these numbers:** The Caleta island results are the most reliable because the AOI boundaries come directly from LiDAR coverage of isolated islands with natural coastline boundaries. The San Lorenzo ratios are lower primarily because the AOI polygons were approximated from GPS waypoint notes and may not match the actual areas that field teams counted. Additionally, many San Lorenzo penguins nest in caves and burrows where they are not visible to LiDAR.
+**Interpreting these numbers:**
 
-These are candidate counts, not confirmed penguin identifications. Precision estimation (what fraction of candidates are actually penguins) requires manual spot-checking, which is underway.
+The **Caleta island results (0.81–0.98)** are the most reliable comparisons because the AOI boundaries are derived from LiDAR coverage of physically isolated islands, though both have caveats: Tiny Island's AOI area (0.53 ha) is smaller than the reported 0.7 ha due to Otsu thresholding of sparse water returns, and Small Island has some shoreline edge effects that may affect the boundary.
+
+The **San Lorenzo results (0.19–0.29)** are lower for two documented reasons:
+
+1. **Burrow occlusion:** Analysis of 84 thermal-labeled penguins at the legacy site found 36 (43%) positioned deep in burrows where they have no above-ground signature. If this proportion holds at other cave sites, it would set a theoretical detection ceiling of approximately 57% for overhead LiDAR. This is an estimate from a small sample, not a confirmed site-wide figure.
+
+2. **AOI boundary uncertainty:** San Lorenzo polygons were constructed from sparse GPS waypoints. The Plains polygon area (0.73 ha) is smaller than reported (0.98 ha), and several boundary coordinates require field team clarification.
+
+These are candidate counts, not confirmed penguin identifications. Precision estimation (what fraction of candidates are actually penguins) requires manual spot-checking of detection samples.
 
 ## Current Status
 
 | Component | Status | Summary |
 |-----------|--------|---------|
-| LiDAR detection | Production | Deterministic pipeline with regression tests; validated on Argentina data |
-| AOI evaluation | Production | Tools for clipping detections to survey boundaries and computing site-level counts |
-| Thermal extraction | Research | Radiometric data extraction works; temperature calibration unresolved |
-| Thermal-LiDAR fusion | Partial | Spatial join implemented; blocked on thermal georeferencing |
-| Ground truth | In progress | ~3,705 field counts available; AOI boundary confirmation needed from field team |
+| LiDAR detection | Working | Deterministic pipeline with regression tests; compared against Argentina field data |
+| AOI evaluation | Working | Tools for clipping detections to survey boundaries and computing site-level counts |
+| Thermal extraction | Paused | 16-bit radiometric extraction works; temperature calibration unresolved |
+| Thermal-LiDAR fusion | Paused | Spatial join exists; blocked on thermal georeferencing |
+| Ground truth | Incomplete | ~3,705 field counts available; AOI boundary confirmation needed from field team |
 
 ### What's Needed Next
 
-1. **AOI boundary confirmation** — The field team needs to provide or confirm digitized polygon boundaries for San Lorenzo sites. Current AOIs are approximated from GPS waypoint notes and show area mismatches with reported survey areas.
-2. **Precision estimation** — Manual labeling of 50–100 candidate detections within a validated AOI to quantify what fraction are true penguins vs. rocks or vegetation.
-3. **Thermal calibration** — Resolving the temperature offset to enable thermal-based detection and sensor fusion.
-4. **Box count validation** — Running LiDAR detection on the smaller box count areas (San Lorenzo: 32 and 55 penguins; Caleta: 8 and 12 penguins) where ground truth boundaries are more precise.
+1. **AOI boundary confirmation** — The field team needs to provide or confirm digitized polygon boundaries for San Lorenzo sites. A detailed clarification request is available in `notes/client_aoi_clarifications.md`.
+2. **Precision estimation** — Manual labeling of 50–100 candidate detections within a validated AOI to quantify what fraction are true penguins vs. rocks or vegetation. Protocol documented in `docs/process/LABELING_PROTOCOL.md`.
+3. **Box count validation** — Running LiDAR detection on the smaller box count areas (San Lorenzo: 32 and 55 penguins; Caleta: 8 and 12 penguins) where ground truth boundaries are more precise.
+
+### Future Work (Deprioritized)
+
+- **Thermal calibration** — A ~9°C calibration offset remains unresolved. The extraction infrastructure is complete, but thermal detection is research-quality only.
+- **Sensor fusion** — Combining LiDAR and thermal detections. Blocked on thermal calibration.
+
+## Known Limitations
+
+| Limitation | Impact | Status |
+|------------|--------|--------|
+| Burrow occlusion | Estimated ~43% of penguins invisible to overhead LiDAR at cave sites (based on 84 thermal-labeled samples at one site) | Documented; not solvable by parameter tuning |
+| Candidate ≠ individual | Detections are blob centroids, not confirmed penguins; false positives from rocks, vegetation, burrow rims | Precision audit defined but not yet run |
+| Adjacent penguin merging | Close-standing penguins may produce a single detection at 0.25 m resolution | Watershed splitting helps in some cases |
+| Sensor-specific tuning | DJI L2 and TrueView 515 require different parameters for best results | Per-sensor parameters documented |
+| AOI boundary sensitivity | Site-level counts change significantly depending on clipping polygon | Awaiting field team clarification on San Lorenzo boundaries |
 
 ## Outputs
 
@@ -71,7 +97,7 @@ The pipeline produces several output types, stored in `data/processed/` and `qc/
 - **Detection summaries** (JSON) — Per-site candidate counts with coordinates, heights, and areas
 - **Spatial layers** (GeoJSON, GeoPackage) — Candidate locations and AOI polygons in UTM Zone 20S (EPSG:32720) for use in GIS software
 - **Interactive maps** (HTML) — Folium web maps with candidate markers and AOI overlays, viewable in any browser
-- **Static maps** (PNG) — Publication-ready detection maps with processing metadata and provenance embedded
+- **Static maps** (PNG) — Detection overlay maps with processing metadata
 - **QC reports** — Validation summaries comparing candidate counts to field counts by site
 
 ## Project Structure
@@ -103,14 +129,23 @@ pytest tests/                           # Run full test suite
 
 Hardware: 16 GB RAM minimum (32 GB recommended for large LiDAR files), 50 GB free disk per survey site.
 
+## Reproducibility
+
+The pipeline produces deterministic results — the same input always gives the same output:
+
+- **Golden AOI baseline:** Running `make golden` produces exactly 802 detections on the test tile, verified by SHA256 hash
+- **Test suite:** 108 automated tests including regression baselines
+- **Provenance tracking:** Outputs include metadata recording parameters, CRS, and input files
+- All algorithms are deterministic; there are no stochastic components
+
 ## Key References
 
 | Document | Purpose |
 |----------|---------|
 | [RUNBOOK.md](RUNBOOK.md) | Tested pipeline commands |
-| [docs/reports/STATUS.md](docs/reports/STATUS.md) | Detailed implementation state |
+| [docs/reports/STATUS.md](docs/reports/STATUS.md) | Current implementation state |
+| [docs/reports/LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md) | Algorithm documentation |
 | [docs/reports/LIDAR_VALIDATION.md](docs/reports/LIDAR_VALIDATION.md) | AOI-clipped validation results |
-| [docs/supplementary/FIELD_SOP.md](docs/supplementary/FIELD_SOP.md) | Field deployment procedures |
 
 ## License
 

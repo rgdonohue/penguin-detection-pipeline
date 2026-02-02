@@ -1,6 +1,8 @@
 # Project Status — Honest Assessment
 
-Last updated: 2025-12-21 UTC
+Last updated: 2026-02-02 UTC
+
+**Current focus:** Argentina 2025 **LiDAR processing + AOI verification** (client deliverables). Thermal and fusion work is **paused** (research-only) pending calibration/georeferencing.
 
 ---
 

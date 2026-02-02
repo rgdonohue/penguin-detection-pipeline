@@ -42,7 +42,7 @@ Caleta (islands):
 
 | AOI | Field Count | LiDAR Candidates | Candidate/Field Ratio | Notes |
 | --- | ---:| ---:| ---:| --- |
-| San Lorenzo Caves | 908 | 263 | 0.29 | AOI derived from notes; polygon area differs from reported 0.60 ha. |
+| San Lorenzo Caves | 908 | 263 | 0.29 | AOI derived from notes; polygon area ~0.60 ha (matches reported). |
 | San Lorenzo Plains | 453 | 86 | 0.19 | AOI derived from notes; polygon area differs from reported 0.98 ha. |
 
 ### Caleta (Islands)
