@@ -9,7 +9,7 @@ Last updated: 2026-02-02 UTC
 ## ✅ What Actually Works
 
 ### 1. LiDAR Detection Pipeline
-**Status:** RUNS SUCCESSFULLY; VALIDATION IN PROGRESS (SEMANTICS LOCKED, AOI EVAL NEXT)
+**Status:** RUNS SUCCESSFULLY; VALIDATION IN PROGRESS (FEATURE ANALYSIS COMPLETE, MANUAL LABELING IN PROGRESS)
 
 - **Script:** `scripts/run_lidar_hag.py` (620+ lines, streaming architecture)
 - **Dependencies:** `pipelines/utils/provenance.py`, laspy, scipy, scikit-image
@@ -22,11 +22,21 @@ Last updated: 2026-02-02 UTC
 - 754M points total (100% processed)
 - 25.8 GB across DJI L2 and TrueView 515 sensors
 
+**Validation Progress (2026-02-02):**
+- AOI-clipped evaluation complete for Caleta sites (315/340 inside AOI at Tiny Island; 1,473/1,473 at Small Island)
+- Per-detection feature extraction done for 3 sites (Caleta Tiny, Caleta Small, San Lorenzo box count) — RGB, intensity, greenness, morphological features
+- Cross-sensor comparison (DJI L2 vs TrueView 515): intensity scales incompatible; greenness index transfers across sensors
+- Parameter sweep on 2 tiles: hag_max is dominant sensitivity parameter at both sites
+- 86% of Caleta Tiny inside-AOI detections form tight spectral core (consistent with high precision)
+- **Label sample bundles generated** for Caleta Tiny Island (80 samples) and Caleta Small Island (80 samples) with RGB+HAG dual-panel crops
+- **Manual labeling in progress** — precision estimation via `scripts/estimate_precision.py` will follow
+- See `docs/reports/FEATURE_ANALYSIS.md` for full analysis
+
 **VALIDATION CAVEATS (see `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md`):**
 - Previous "+6% / +1% error" claims were based on box count comparisons where tile extents ≠ counted areas
 - Top-surface estimator (`p95`) is an approximate streaming quantile sensitive to order/chunking
 - Detection semantics are now explicitly encoded as **candidates (blob centroids), not guaranteed individuals** (see `pipelines/contracts.py`)
-- AOI-clipped precision not yet computed for any site
+- AOI-clipped precision pending manual labeling (label samples generated, labeling in progress)
 
 ### 2. Foundation Infrastructure
 **Status:** WORKING
@@ -84,7 +94,7 @@ Last updated: 2026-02-02 UTC
 - ✅ `pipelines/golden.py` is now a QC harness wrapper over `tests/test_golden_aoi.py` (use `make golden`).
 
 ### 2. Ground Truth Annotation
-**Status:** 44% COMPLETE (legacy), NOT STARTED (Argentina)
+**Status:** 44% COMPLETE (legacy), LABELING IN PROGRESS (Argentina)
 
 **Legacy (Punta Tombo):**
 - Completed: 60 penguins across 3 frames (0353, 0355, 0356)
@@ -94,6 +104,10 @@ Last updated: 2026-02-02 UTC
 **Argentina:**
 - GPS waypoints extracted but NOT projected to pixel coordinates
 - No per-image ground truth CSVs exist yet
+- **Label sample bundles generated** for precision estimation:
+  - Caleta Tiny Island: 80 stratified samples with RGB+HAG crops (`data/processed/label_samples/caleta_tiny_island/`)
+  - Caleta Small Island: 80 stratified samples with RGB+HAG crops (`data/processed/label_samples/caleta_small_island/`)
+- Manual labeling in progress using `docs/process/LABELING_PROTOCOL.md`
 
 ### 3. Thermal Detection
 **Status:** RESEARCH PHASE
@@ -109,7 +123,9 @@ Last updated: 2026-02-02 UTC
 
 | Component | Status | Confidence | Blocker |
 |-----------|--------|------------|---------|
-| LiDAR Detection | Runs, unvalidated | Medium | AOI alignment, detection semantics |
+| LiDAR Detection | Runs, AOI-clipped, features extracted | Medium-High | Precision pending manual labeling |
+| LiDAR Feature Analysis | Complete (3 sites, 2 sensors) | High | None |
+| LiDAR Label Samples | Generated (2 × 80 samples) | High | Manual labeling in progress |
 | LiDAR Tests | Passing | High | None |
 | Thermal Extraction | Working | Medium | Calibration offset |
 | Thermal Detection | Research | Low | F1 < 0.1 on most frames |
@@ -131,26 +147,32 @@ This repo tracks two kinds of progress:
 
 Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 
-### Immediate Blockers (fix before any other work)
+### Completed (this sprint)
 
-1. **Define detection semantics** — what does one LiDAR detection represent? (individual penguin, blob center, occupied cell)
-2. **Implement AOI-clipped evaluation** — build precise polygon boundaries for each counted area; no count comparisons without AOI clipping
-3. **Lock top-surface estimator** — use `max` (deterministic) or implement true per-cell quantile
-4. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
-5. **Resolve thermal calibration** — address the documented offsets before operational use
+1. ~~**Define detection semantics**~~ — ✅ Done (`pipelines/contracts.py`): candidates (blob centroids), not guaranteed individuals
+2. ~~**Implement AOI-clipped evaluation**~~ — ✅ Done (`pipelines/aoi_eval.py`): Caleta Tiny 315/340, Caleta Small 1473/1473
+3. ~~**Lock top-surface estimator**~~ — ✅ Using `max` (deterministic) for all validation work
+4. ~~**Feature analysis**~~ — ✅ Done: RGB, intensity, greenness, morphological for 3 sites across 2 sensors
+5. ~~**Label sample generation**~~ — ✅ Done: 80-sample bundles for Caleta Tiny + Caleta Small with RGB+HAG crops
+
+### Immediate (in progress)
+
+6. **Manual labeling** of label sample bundles → precision estimation via `scripts/estimate_precision.py`
+7. **Feature-by-label analysis** — after labels, plot TP vs FP feature distributions
+8. **Make fusion inputs compatible** — ensure thermal detections are produced with CRS `x/y` to join with LiDAR
+9. **Resolve thermal calibration** — address the documented offsets before operational use
 
 ### Short-term
 
-6. Manual labeling of ~50-100 LiDAR detections (within AOI) to compute precision
-7. Complete legacy ground truth (4 frames, 77 penguins)
-8. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
-9. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
+10. Complete legacy ground truth (4 frames, 77 penguins)
+11. Implement thermal→CRS georeferencing / ortho detection outputs for fusion
+12. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
 
 ### Medium-term
 
-10. Georeference Argentina GPS waypoints
-11. Resolve thermal calibration (investigate 9°C and 30°C offsets)
-12. Ground model experiment — compare `min` vs `p05` vs CSF on same data with AOI clipping
+13. Georeference Argentina GPS waypoints
+14. Resolve thermal calibration (investigate 9°C and 30°C offsets)
+15. Ground model experiment — compare `min` vs `p05` vs CSF on same data with AOI clipping
 
 ---
 
@@ -164,6 +186,8 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 | Argentina tuning | `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md` |
 | This status | `docs/reports/STATUS.md` |
 | LiDAR honest assessment | `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md` |
+| Feature analysis | `docs/reports/FEATURE_ANALYSIS.md` |
+| Labeling protocol | `docs/process/LABELING_PROTOCOL.md` |
 | Detailed review | `docs/reports/PROJECT_STATUS_REVIEW_2025-12-17.md` |
 | Tile overlap evidence | `data/interim/tile_overlap_analysis.json` |
 
@@ -173,11 +197,12 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 
 ### DJI L2 (Caleta sites)
 ```bash
+# Validated baseline (hag_max most sensitive; see FEATURE_ANALYSIS.md parameter sweep)
 python3 scripts/run_lidar_hag.py \
   --data-root "data/2025/Caleta Small Island" \
   --out data/interim/caleta.json \
-  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
-  --min-area-cells 3 --max-area-cells 60 \
+  --cell-res 0.25 --hag-min 0.20 --hag-max 0.60 \
+  --min-area-cells 2 --max-area-cells 80 \
   --dedupe-radius-m 0.5 --emit-geojson --plots
 ```
 
