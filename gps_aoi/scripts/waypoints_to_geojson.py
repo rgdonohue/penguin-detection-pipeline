@@ -173,16 +173,19 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     features: list[dict[str, Any]] = []
-    for site_id, cfg in SITE_CONFIG.items():
-        path = waypoints_dir / f"{site_id}.csv"
-        if not path.exists():
-            continue
+    csv_paths = sorted(waypoints_dir.glob("*.csv"))
+    for path in csv_paths:
+        site_id = path.stem
+        cfg = SITE_CONFIG.get(site_id, {"name": site_id, "crs_epsg": 4326, "is_point": False})
         points = load_waypoints(path)
         feat = process_site(site_id, points, cfg)
+        out_path = out_dir / f"{site_id}_wgs84.geojson"
         if feat is None:
+            fc = {"type": "FeatureCollection", "features": []}
+            out_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+            print(f"  {out_path.name} (empty)")
             continue
         features.append(feat)
-        out_path = out_dir / f"{site_id}_wgs84.geojson"
         fc = {"type": "FeatureCollection", "features": [feat]}
         out_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
         print(f"  {out_path.name}")
