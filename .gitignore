@@ -67,6 +67,12 @@ tmp/
 # AI assistants
 .claude/
 .gemini-clipboard/
+CLAUDE.md
+
+# Session logs / transcripts
+docs/logs/archived/
+*-this-session-is-being-continued-*.txt
+*-caveat-the-messages-below-*.txt
 
 # Build artifacts
 build/

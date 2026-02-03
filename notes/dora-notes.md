@@ -39,5 +39,5 @@ Objective: translate the latest DORA guidance into concrete habits for the pengu
 - Schedule a fortnightly 15-minute retro focused on DORA metrics and queued improvements.
 
 [1]: https://cloud.google.com/blog/products/ai-machine-learning/announcing-the-2025-dora-report "Announcing the 2025 DORA Report | Google Cloud Blog"
-[2]: https://cloud.google.com/blog/products/ai-machine-learning/introducing-doras-inaugural-ai-capabilities-model?utm_source=chatgpt.com "Introducing DORA's inaugural AI Capabilities Model"
-[3]: https://dora.dev/guides/dora-metrics-four-keys/?utm_source=chatgpt.com "DORA's software delivery metrics: the four keys"
+[2]: https://cloud.google.com/blog/products/ai-machine-learning/introducing-doras-inaugural-ai-capabilities-model "Introducing DORA's inaugural AI Capabilities Model"
+[3]: https://dora.dev/guides/dora-metrics-four-keys/ "DORA's software delivery metrics: the four keys"
