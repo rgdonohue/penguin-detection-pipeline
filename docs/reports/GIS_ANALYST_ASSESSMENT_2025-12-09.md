@@ -260,7 +260,7 @@ uvx --from gdal-mcp gdal --transport stdio
 - [x] Test suite (12 golden AOI + 5 thermal tests)
 - [x] Thermal extraction infrastructure
 - [x] Provenance tracking system
-- [x] Updated CLAUDE.md with current state
+- [x] Updated project documentation with current state
 
 ### Blocked
 - [ ] Thermal detection with acceptable F1 (blocked by calibration + ground truth)

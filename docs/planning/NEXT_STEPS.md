@@ -284,7 +284,7 @@ Understand the relationship between LiDAR and thermal detections:
    - Too many markdown files in `docs/supplementary/`
    - Create `docs/archive/` for old investigation notes
    - Keep only essential docs in root and `docs/`:
-     - Root: `README.md`, `PRD.md`, `RUNBOOK.md`, `CLAUDE.md`, `Makefile`
+     - Root: `README.md`, `PRD.md`, `RUNBOOK.md`, `Makefile`
      - `docs/planning/`: Working plans (`docs/planning/NEXT_STEPS.md`, `PLAN.md`, etc.)
      - `docs/reports/`: Status snapshots (`docs/reports/STATUS.md`, thermal progress logs)
 
@@ -456,48 +456,6 @@ Understand the relationship between LiDAR and thermal detections:
 - ✅ docs/reports/STATUS.md updated
 
 ---
-
-## Notes for Claude
-
-### When Implementing
-1. **Prioritize working code over perfect code** - client needs results
-2. **Generate visual outputs early and often** - client specifically requested
-3. **Document assumptions and uncertainties** - thermal signal is weak, be honest
-4. **Checkpoint frequently** - full dataset runs can fail
-5. **Validate outputs at each phase** - don't propagate errors downstream
-
-### Scripts to Create
-- `scripts/optimize_thermal_detection.py` (Phase 2)
-- `scripts/run_thermal_detection_batch.py` (Phase 3)
-- `scripts/run_fusion_join.py` (Phase 5)
-- `scripts/generate_client_report.py` (Phase 6)
-
-### Scripts to Refactor/Consolidate
-- Merge multiple `test_thermal_detection*.py` into single parameterized script
-- Extract common functions to `pipelines/thermal.py` library
-- Move investigation scripts to `scripts/experiments/`
-
-### Documentation to Update
-- `docs/reports/STATUS.md` - reflect post-investigation status
-- `RUNBOOK.md` - add full-dataset workflow
-- `PRD.md` - possibly update with 1533 target count
-- `README.md` - add link to docs/planning/NEXT_STEPS.md
-
----
-
-## Questions for Richard
-
-1. **Ground Truth Process:** Do you want help creating a click-to-annotate tool, or prefer manual CSV entry?
-
-2. **1533 Source:** Where does the 1533 estimate come from? (manual count, previous analysis, rough estimate?)
-
-3. **Client Timeline:** When is the Argentina trip? How urgent are these outputs?
-
-4. **Compute Resources:** Do you have access to multi-core machine for batch processing? (will affect runtime estimates)
-
-5. **Deliverable Format:** What format for client outputs? (PDF report, PowerPoint, Jupyter notebook, all of above?)
-
-6. **Fusion Priority:** Is fusion analysis critical for Argentina deployment, or is separate LiDAR+Thermal counts sufficient?
 
 ---
 

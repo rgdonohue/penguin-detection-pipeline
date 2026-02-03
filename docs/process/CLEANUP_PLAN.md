@@ -13,9 +13,9 @@
 - ✅ `PRD.md` (keep - product requirements)
 - ✅ `RUNBOOK.md` (keep - operational commands)
 - ✅ `STATUS.md` (keep - current status)
-- ✅ `CLAUDE.md` (keep - AI agent guidance)
+- ✅ `CONTRIBUTING.md` (keep - AI agent guidance)
 - ✅ `NEXT_STEPS.md` (keep - just created)
-- ✅ `AI_POLICY.md` (keep - collaboration guardrails)
+- ✅ `RUNBOOK.md` (keep - collaboration guardrails)
 - ✅ `DORA_INTEGRATION.md` (keep - best practices)
 
 **docs/ directory:** 4 client-facing summaries (GOOD)
@@ -140,7 +140,7 @@ make test
 - **[RUNBOOK.md](RUNBOOK.md)** - Operational commands and workflows
 - **[STATUS.md](STATUS.md)** - Current implementation status
 - **[NEXT_STEPS.md](NEXT_STEPS.md)** - Upcoming work and priorities
-- **[CLAUDE.md](CLAUDE.md)** - AI agent collaboration guidance
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - AI agent collaboration guidance
 
 ## Client Deliverables
 
@@ -246,8 +246,8 @@ penguins-4.0/
 ├── RUNBOOK.md                   # ✅ Keep - operational commands
 ├── STATUS.md                    # ✅ Keep (updated)
 ├── NEXT_STEPS.md                # ✅ Keep - comprehensive plan
-├── CLAUDE.md                    # ✅ Keep - AI guidance
-├── AI_POLICY.md                 # ✅ Keep
+├── CONTRIBUTING.md                    # ✅ Keep - AI guidance
+├── RUNBOOK.md                 # ✅ Keep
 ├── DORA_INTEGRATION.md          # ✅ Keep
 ├── Makefile
 ├── requirements.txt
@@ -322,7 +322,7 @@ penguins-4.0/
 - [ ] Update RUNBOOK.md (add full-dataset sections)
 - [ ] Archive old interim test outputs
 - [ ] Verify all links in documentation still work
-- [ ] Update CLAUDE.md if needed (reference to NEXT_STEPS.md)
+- [ ] Update CONTRIBUTING.md if needed (reference to NEXT_STEPS.md)
 
 ---
 

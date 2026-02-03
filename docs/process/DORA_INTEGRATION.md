@@ -10,7 +10,6 @@ How this penguin pipeline embodies DORA best practices for AI-assisted solo deve
 **DORA:** Define AI tool usage, boundaries, and review rules.
 
 **We do:**
-- `AI_POLICY.md` - Explicit allowed/forbidden activities
 - PRD Section 16 - Agent constraints codified
 - Pre-commit hooks prevent legacy data modification
 
@@ -27,7 +26,6 @@ How this penguin pipeline embodies DORA best practices for AI-assisted solo deve
 **DORA:** Wire AI into codebase with proper context.
 
 **We do:**
-- `CLAUDE.md` - Repository guidance for AI agents
 - `PRD.md` - Single source of truth for requirements
 - `RUNBOOK.md` - Authoritative commands
 - `manifests/harvest_notes.md` - Searchable legacy findings
@@ -210,7 +208,7 @@ If AI-generated code breaks the pipeline:
 2. **Rollback:** `make rollback` to last known-good
 3. **Validate:** `make golden` to confirm restoration
 4. **Log:** Add incident to `manifests/incidents.md`
-5. **Learn:** Update `AI_POLICY.md` to prevent recurrence
+5. **Learn:** Update project policies to prevent recurrence
 
 **Target time to restore:** < 30 minutes
 

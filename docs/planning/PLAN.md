@@ -10,7 +10,7 @@
 ## DORA 2025 Integration (Documented, Partially Implemented)
 
 DORA principles documented for future implementation:
-- `AI_POLICY.md` - Collaboration guardrails ✅ (documented)
+- Collaboration guardrails codified in PRD ✅
 - `DORA_INTEGRATION.md` - Full best practices reference ✅ (documented)
 - `Makefile` - Minimal working targets only ⚠️ (test-lidar works, metrics/golden don't)
 - `.pre-commit-config.yaml` - Legacy data guard active ⚠️ (manifest hook disabled)
@@ -27,10 +27,10 @@ DORA principles documented for future implementation:
 - Legacy data mounted (read-only) at `data/legacy_ro/`
 - Working LiDAR detector found and copied to `scripts/run_lidar_hag.py`
 - Tested: 802 detections on cloud3.las
-- Documentation: PRD, CLAUDE.md, PLAN, AI_POLICY, DORA principles
+- Documentation: PRD, PLAN, DORA principles
 
 ### ✅ Critical Discovery
-**Thermal radiometric data IS encoded in images** - previous assumptions about missing data were WRONG. Updated in PRD and CLAUDE.md.
+**Thermal radiometric data IS encoded in images** - previous assumptions about missing data were WRONG. Updated in PRD.
 
 ### ⚠️ Corrective Actions (After Codex Review)
 - Stripped Makefile to only working targets

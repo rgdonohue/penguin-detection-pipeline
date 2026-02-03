@@ -934,7 +934,6 @@ source .venv/bin/activate
 
 See PRD.md for project requirements.
 See STATUS.md for current implementation state.
-See AI_POLICY.md for collaboration with AI assistants.
 
 ---
 

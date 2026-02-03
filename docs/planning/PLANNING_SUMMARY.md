@@ -121,7 +121,7 @@ From `notes/pipeline_todo.md`:
 ### Stable Reference
 - **PRD.md** ← Requirements & design
 - **README.md** ← User-facing quick start (to be created)
-- **CLAUDE.md** ← AI collaboration guidance
+- **RUNBOOK.md** ← Operational commands and collaboration guidance
 
 ---
 

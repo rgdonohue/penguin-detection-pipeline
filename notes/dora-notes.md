@@ -11,7 +11,7 @@ Objective: translate the latest DORA guidance into concrete habits for the pengu
 ## Collaboration & Workflow Improvements
 - **Adopt structured work intake.** Every task (including AI prompts) references the user scenario and definition of done; capture it in PR descriptions and `PLAN.md`.
 - **Enforce small batches.** Target PRs that touch a single stage (`scripts/`, `pipelines/`, or `tests/`) and must pass `make golden` + pytest before review.
-- **Codify the AI policy.** Extend `CLAUDE.md` / `AGENTS.md` with the shared guardrails (no parameter drift outside `RUNBOOK.md`, provenance notes required, restricted access to `data/legacy_ro/`).
+- **Codify the AI policy.** Extend project documentation with the shared guardrails (no parameter drift outside `RUNBOOK.md`, provenance notes required, restricted access to `data/legacy_ro/`).
 - **Pair reviews across agents and humans.** Require one human approval plus one AI code review when changes originate from an agent; record outcome in PR checklist.
 
 ## Technical Practices for Stability
@@ -32,7 +32,7 @@ Objective: translate the latest DORA guidance into concrete habits for the pengu
 - **Reporting cadence.** Add a monthly `notes/delivery-metrics-YYYY-MM.md` summary plotting the Four Keys trends and linking to supporting manifests.
 
 ## Immediate Next Steps
-- Draft the shared AI policy addendum and merge it into `CLAUDE.md` / `AGENTS.md`.  
+- Draft the shared AI policy addendum and merge it into project documentation.  
 - Add PR template checkboxes for: small batch scope, `make golden` result, incident log update, and human validation of QC assets.  
 - Create `manifests/incidents.md` and seed it with historical context (if any).  
 - Automate capture of `timings.json` and `test_run.json` stats into a `manifests/delivery_metrics.csv`.  
