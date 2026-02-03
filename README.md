@@ -36,8 +36,6 @@ See [RUNBOOK.md](RUNBOOK.md) for full command reference and [DEVELOPMENT.md](DEV
 
 Field data from San Lorenzo and Caleta sites in Patagonia (Argentina 2025).
 
-![Study Sites](qc/panels/study_sites_map.png)
-
 | Site | Type | Sensors |
 |------|------|---------|
 | San Lorenzo Caves | Mainland, burrow-heavy | TrueView 515, H30T |
