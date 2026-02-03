@@ -10,6 +10,7 @@ produce thermal detections with ``x``/``y`` coordinates in the target CRS.
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,6 +43,10 @@ def run(params: FusionParams) -> Path:
 
     lidar_dets = _extract_detections(lidar_obj, source="lidar")
     thermal_dets = _extract_detections(thermal_obj, source="thermal")
+
+    effective_crs = lidar_crs or thermal_crs
+    _validate_coordinate_range(lidar_dets, effective_crs)
+    _validate_coordinate_range(thermal_dets, effective_crs)
 
     out = _join_detections(
         lidar_dets=lidar_dets,
@@ -82,6 +87,44 @@ def _extract_crs(summary: Dict[str, Any]) -> Optional[str]:
                     return f"EPSG:{int(cleaned)}"
                 return cleaned
     return None
+
+
+def _is_geographic_crs(crs_str: str) -> bool:
+    """Heuristic: return True if the CRS string looks like a geographic (degree-based) CRS."""
+    crs_str_lower = crs_str.lower().strip()
+    # EPSG:4326 and similar geographic CRS codes
+    if crs_str_lower.startswith("epsg:"):
+        try:
+            code = int(crs_str_lower.split(":")[1])
+            # Well-known geographic CRS codes
+            return code in (4326, 4269, 4267, 4258, 4283, 4167, 4612)
+        except (ValueError, IndexError):
+            pass
+    if "geogcs" in crs_str_lower:
+        return True
+    return False
+
+
+def _validate_coordinate_range(detections: List[Dict[str, Any]], crs: Optional[str]) -> None:
+    """Warn (not fail) if coordinates look implausible for the declared CRS."""
+    if crs is None:
+        return  # Can't validate without known CRS
+    xs = [float(d["x"]) for d in detections if "x" in d]
+    if not xs:
+        return
+    max_abs_x = max(abs(x) for x in xs)
+    if _is_geographic_crs(crs):
+        # Geographic: expect degrees
+        if max_abs_x > 360:
+            warnings.warn(
+                f"Geographic CRS {crs} but coordinates exceed 360: likely projected meters"
+            )
+    else:
+        # Projected: expect meters (UTM range ~100k-900k)
+        if max_abs_x < 360:
+            warnings.warn(
+                f"Projected CRS {crs} but coordinates < 360: likely geographic degrees"
+            )
 
 
 def _extract_detections(summary: Dict[str, Any], source: str) -> List[Dict[str, Any]]:

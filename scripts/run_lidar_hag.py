@@ -57,6 +57,13 @@ try:
 except Exception:
     LASPY_AVAILABLE = False
 
+# Optional CSF ground model
+try:
+    import CSF as _csf_module  # type: ignore
+    HAS_CSF = True
+except ImportError:
+    HAS_CSF = False
+
 
 def _is_sample_path(path: Path) -> bool:
     """Return True if any path component equals 'sample' (case-insensitive)."""
@@ -490,6 +497,7 @@ def _estimate_grid_bytes(
     ground_method: str,
     top_method: str,
     slope_max_deg: Optional[float],
+    density_stats: bool = False,
 ) -> int:
     n_cells = int(ny) * int(nx)
     if n_cells <= 0:
@@ -507,6 +515,8 @@ def _estimate_grid_bytes(
     bytes_per_cell += 8  # labeled (int64 conservative)
     bytes_per_cell += 1  # mask
     bytes_per_cell += 4  # scratch buffers
+    if density_stats:
+        bytes_per_cell += 4  # count grid (int32)
     return int(n_cells * bytes_per_cell)
 
 
@@ -631,16 +641,116 @@ def _write_geojson(
         return str(e)
 
 
+def _build_ground_csf(
+    las_path: Path,
+    cell_res: float,
+    ny: int,
+    nx: int,
+    mins: np.ndarray,
+    csf_cloth_resolution: float = 0.5,
+    csf_class_threshold: float = 0.3,
+    csf_max_points: int = 20_000_000,
+    verbose: bool = False,
+) -> Tuple[np.ndarray, Dict]:
+    """Build ground DEM using Cloth Simulation Filter (CSF).
+
+    CSF requires all points loaded at once. If point count exceeds
+    *csf_max_points*, returns ``None`` to signal the caller should fall back.
+
+    Returns ``(dem_array, csf_metadata)`` on success.
+    """
+    if not HAS_CSF:
+        raise RuntimeError("CSF not installed. Run: pip install cloth-simulation-filter")
+
+    # Read all points
+    with laspy.open(str(las_path)) as fh:
+        las_data = fh.read()
+    x = np.asarray(las_data.x, dtype=np.float64)
+    y = np.asarray(las_data.y, dtype=np.float64)
+    z = np.asarray(las_data.z, dtype=np.float64)
+    npts = x.size
+
+    csf_meta: Dict = {"ground_method": "csf", "csf_total_points": int(npts)}
+
+    if npts > csf_max_points:
+        csf_meta["csf_fallback"] = True
+        csf_meta["csf_fallback_reason"] = (
+            f"Point count {npts} exceeds csf_max_points {csf_max_points}"
+        )
+        if verbose:
+            print(
+                f"    CSF: {npts} points exceeds limit {csf_max_points}; "
+                f"falling back to p05",
+                file=sys.stderr,
+                flush=True,
+            )
+        return np.array([]), csf_meta  # empty array signals fallback
+
+    if verbose:
+        print(f"    CSF: classifying {npts} points ...", flush=True)
+
+    csf = _csf_module.CSF()
+    csf.params.bSloopSmooth = True
+    csf.params.cloth_resolution = float(csf_cloth_resolution)
+    csf.params.class_threshold = float(csf_class_threshold)
+
+    # CSF expects Nx3 array
+    xyz = np.column_stack([x, y, z])
+    csf.setPointCloud(xyz)
+    ground_indices = _csf_module.VecInt()
+    non_ground_indices = _csf_module.VecInt()
+    csf.do_filtering(ground_indices, non_ground_indices)
+
+    ground_idx = np.asarray(ground_indices)
+    csf_meta["csf_ground_points"] = int(ground_idx.size)
+    csf_meta["csf_nonground_points"] = int(npts - ground_idx.size)
+    csf_meta["csf_fallback"] = False
+
+    if verbose:
+        print(
+            f"    CSF: {ground_idx.size} ground / {npts - ground_idx.size} non-ground",
+            flush=True,
+        )
+
+    # Build DEM from ground points only (cell-wise minimum)
+    dem = np.full((ny, nx), np.inf, dtype=np.float32)
+    gx = x[ground_idx]
+    gy = y[ground_idx]
+    gz = z[ground_idx].astype(np.float32)
+
+    ix = np.floor((gx - mins[0]) / cell_res).astype(np.int64)
+    iy = np.floor((gy - mins[1]) / cell_res).astype(np.int64)
+    valid = (ix >= 0) & (iy >= 0) & (ix < nx) & (iy < ny)
+    flat = iy[valid] * nx + ix[valid]
+    if flat.size:
+        np.minimum.at(dem.ravel(), flat, gz[valid])
+
+    # Fill no-data via nearest-neighbor interpolation
+    if np.isinf(dem).any():
+        finite = np.isfinite(dem)
+        if finite.any() and (~finite).any():
+            idx = ndi.distance_transform_edt(~finite, return_distances=False, return_indices=True)
+            dem = dem[tuple(idx)]
+        else:
+            dem = np.full_like(dem, 0.0)
+
+    return dem.astype(np.float32), csf_meta
+
+
 def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: bool,
                      ground_method: str = "min",
                      quantile_lr: float = 0.05,
-                     bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None) -> Tuple[np.ndarray, Dict]:
+                     bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+                     count_grid: Optional[np.ndarray] = None) -> Tuple[np.ndarray, Dict]:
     """Build a ground-surface DEM by streaming LAS points into a regular grid.
 
     Uses either per-cell minimum Z (``ground_method='min'``) or an online 5th
     percentile estimate (``ground_method='p05'``).  No-data cells are filled via
     nearest-neighbor interpolation.  Returns the DEM array and a metadata dict
     containing grid origin, extent, cell resolution, and shape.
+
+    If *count_grid* is provided (pre-allocated int32 array of shape (ny, nx)),
+    it is incremented per point during the streaming pass for density reporting.
     """
     if bounds is None:
         mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
@@ -669,6 +779,8 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
         if flat.size:
             dem_flat = dem.ravel()
             np.minimum.at(dem_flat, flat, z_valid.astype(np.float32))
+            if count_grid is not None:
+                np.add.at(count_grid.ravel(), flat, 1)
             if ground_method.lower() != "min":
                 q05_flat = q05.ravel()
                 _online_quantile_update_indexed(
@@ -1008,7 +1120,7 @@ def process_file(las_path: Path,
                  fixed_vmin: Optional[float] = None,
                  fixed_vmax: Optional[float] = None,
                  ground_method: str = "min",
-                 top_method: str = "p95",
+                 top_method: str = "max",
                  top_zscore_cap: Optional[float] = None,
                  top_quantile_lr: float = 0.05,
                  refine_grid_pct: Optional[float] = None,
@@ -1031,7 +1143,11 @@ def process_file(las_path: Path,
                  skip_oversized_tiles: bool = False,
                  extract_intensity: bool = False,
                  extract_features: bool = False,
-                 compute_confidence: bool = False) -> Dict:
+                 compute_confidence: bool = False,
+                 density_stats: bool = False,
+                 csf_cloth_resolution: float = 0.5,
+                 csf_class_threshold: float = 0.3,
+                 csf_max_points: int = 20_000_000) -> Dict:
     """Process a single LAS/LAZ tile: build DEM, compute HAG, detect candidates.
 
     Orchestrates the full per-tile pipeline (ground DEM → HAG grid → detection →
@@ -1051,7 +1167,7 @@ def process_file(las_path: Path,
         return {"path": str(las_path), "count": 0, "error": msg}
     ny, nx = _grid_shape(mins, maxs, cell_res)
     if max_grid_mb is not None:
-        est_bytes = _estimate_grid_bytes(ny, nx, ground_method, top_method, slope_max_deg)
+        est_bytes = _estimate_grid_bytes(ny, nx, ground_method, top_method, slope_max_deg, density_stats=density_stats)
         est_mb = est_bytes / (1024 ** 2)
         if est_mb > float(max_grid_mb):
             msg = (
@@ -1070,14 +1186,44 @@ def process_file(las_path: Path,
                     "hag_max": hag_max,
                 }
             raise RuntimeError(f"{las_path.name}: {msg}")
-    dem, meta = build_ground_dem(
-        las_path,
-        cell_res,
-        chunk_size,
-        verbose,
-        ground_method=ground_method,
-        bounds=(mins, maxs),
-    )
+    _count_grid: Optional[np.ndarray] = None
+    if density_stats:
+        _count_grid = np.zeros((ny, nx), dtype=np.int32)
+    _csf_meta: Optional[Dict] = None
+    _actual_ground_method = ground_method
+    if ground_method == "csf":
+        csf_dem, csf_info = _build_ground_csf(
+            las_path, cell_res, ny, nx, mins,
+            csf_cloth_resolution=csf_cloth_resolution,
+            csf_class_threshold=csf_class_threshold,
+            csf_max_points=csf_max_points,
+            verbose=verbose,
+        )
+        _csf_meta = csf_info
+        if csf_dem.size == 0:
+            # CSF fallback: use p05 instead
+            _actual_ground_method = "p05"
+        else:
+            # CSF succeeded; build meta and optionally populate count grid
+            dem = csf_dem
+            meta = {"mins": mins.tolist(), "maxs": maxs.tolist(), "cell_res": cell_res, "shape": [int(ny), int(nx)]}
+            # Count grid still needs a streaming pass if requested
+            if density_stats and _count_grid is not None:
+                for x, y, z in _stream_points(las_path, chunk_size):
+                    ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+                    flat = (iy * nx + ix)
+                    if flat.size:
+                        np.add.at(_count_grid.ravel(), flat, 1)
+    if ground_method != "csf" or _actual_ground_method != ground_method:
+        dem, meta = build_ground_dem(
+            las_path,
+            cell_res,
+            chunk_size,
+            verbose,
+            ground_method=_actual_ground_method if _actual_ground_method != ground_method else ground_method,
+            bounds=(mins, maxs),
+            count_grid=_count_grid,
+        )
     hag = build_hag_grid(
         las_path,
         dem,
@@ -1193,6 +1339,30 @@ def process_file(las_path: Path,
         "hag_max": hag_max,
         "detections": dets,
     }
+    # Record actual ground method used (may differ from requested if CSF fell back)
+    if _actual_ground_method != ground_method:
+        info["ground_method_requested"] = ground_method
+        info["ground_method_actual"] = _actual_ground_method
+    # Optional CSF metadata (separate sub-object, outside _stable_signature scope)
+    if _csf_meta is not None:
+        info["csf"] = _csf_meta
+    # Optional density stats (separate sub-object, outside _stable_signature scope)
+    if density_stats and _count_grid is not None:
+        total_points = int(np.sum(_count_grid))
+        n_cells_total = int(ny) * int(nx)
+        tile_area_m2 = n_cells_total * (cell_res ** 2)
+        empty_cells = int(np.sum(_count_grid == 0))
+        occupied = _count_grid[_count_grid > 0]
+        info["density"] = {
+            "total_points": total_points,
+            "density_pts_per_m2": round(total_points / max(tile_area_m2, 1e-6), 2),
+            "mean_pts_per_cell": round(float(np.mean(_count_grid)), 2),
+            "pct_empty_cells": round(100.0 * empty_cells / max(n_cells_total, 1), 2),
+            "min_pts_per_cell": int(np.min(_count_grid)),
+            "max_pts_per_cell": int(np.max(_count_grid)),
+        }
+        if occupied.size > 0:
+            info["density"]["mean_pts_per_occupied_cell"] = round(float(np.mean(occupied)), 2)
     if emit_geojson_path is not None and dets:
         out_crs = geojson_crs
         coord_units = geojson_coord_units
@@ -1303,8 +1473,8 @@ def main() -> None:
     parser.add_argument("--cell-res", type=float, default=0.25, help="DEM/HAG cell size in meters")
     parser.add_argument("--hag-min", type=float, default=0.2, help="Min HAG (m)")
     parser.add_argument("--hag-max", type=float, default=0.6, help="Max HAG (m)")
-    parser.add_argument("--ground-method", default="min", choices=["min","p05"], help="Ground DEM estimator per cell")
-    parser.add_argument("--top-method", default="p95", choices=["max","p95"], help="Top surface estimator per cell (currently informational)")
+    parser.add_argument("--ground-method", default="min", choices=["min","p05","csf"], help="Ground DEM estimator per cell (csf requires cloth-simulation-filter)")
+    parser.add_argument("--top-method", default="max", choices=["max","p95"], help="Top surface estimator per cell (max recommended; p95 quantile estimator has convergence issues)")
     parser.add_argument("--top-zscore-cap", type=float, default=3.0, help="Z-score cap for top outliers")
     parser.add_argument("--top-quantile-lr", type=float, default=0.05, help="Learning rate for online p95 quantile")
     parser.add_argument("--connectivity", type=int, default=2, choices=[1,2], help="Connectivity for labeling (2 = 8-connected)")
@@ -1370,12 +1540,19 @@ def main() -> None:
                         help="Extract all available per-detection features: intensity (905nm), RGB color, "
                              "single-return fraction, and HAG height profile.  Superset of --extract-intensity.")
     parser.add_argument("--compute-confidence", action="store_true", help="Compute a [0,1] confidence score per detection based on HAG, area, and shape features")
+    parser.add_argument("--density-stats", action="store_true", help="Compute per-tile point density statistics (total points, pts/m², empty cells, etc.)")
+    # CSF ground model options
+    parser.add_argument("--csf-cloth-resolution", type=float, default=0.5, help="CSF cloth resolution (meters)")
+    parser.add_argument("--csf-class-threshold", type=float, default=0.3, help="CSF classification threshold (meters)")
+    parser.add_argument("--csf-max-points", type=int, default=20_000_000, help="Max points for CSF (fallback to p05 above this)")
 
     args = parser.parse_args()
     if args.hag_min >= args.hag_max:
         raise SystemExit("hag_min must be < hag_max")
     if args.min_area_cells >= args.max_area_cells:
         raise SystemExit("min_area_cells must be < max_area_cells")
+    if args.ground_method == "csf" and not HAS_CSF:
+        raise SystemExit("CSF not installed. Run: pip install cloth-simulation-filter")
     _validate_params(args)
 
     data_root = Path(args.data_root).resolve()
@@ -1476,7 +1653,8 @@ def main() -> None:
                     ny_tmp, nx_tmp = _grid_shape(mins_tmp, maxs_tmp, args.cell_res)
                     if args.max_grid_mb is not None:
                         est_bytes = _estimate_grid_bytes(
-                            ny_tmp, nx_tmp, args.ground_method, args.top_method, args.slope_max_deg
+                            ny_tmp, nx_tmp, args.ground_method, args.top_method, args.slope_max_deg,
+                            density_stats=args.density_stats,
                         )
                         est_mb = est_bytes / (1024 ** 2)
                         if est_mb > float(args.max_grid_mb):
@@ -1552,6 +1730,10 @@ def main() -> None:
                 extract_intensity=args.extract_intensity,
                 extract_features=args.extract_features,
                 compute_confidence=args.compute_confidence,
+                density_stats=args.density_stats,
+                csf_cloth_resolution=args.csf_cloth_resolution,
+                csf_class_threshold=args.csf_class_threshold,
+                csf_max_points=args.csf_max_points,
             )
         except Exception as exc:
             msg = f"Failed to process {f.name}: {exc}"

@@ -1,9 +1,10 @@
 import json
+import warnings
 from pathlib import Path
 
 import pytest
 
-from pipelines.fusion import FusionParams, run
+from pipelines.fusion import FusionParams, run, _validate_coordinate_range
 
 
 def _write_json(path: Path, obj: dict) -> None:
@@ -84,3 +85,48 @@ def test_fusion_rejects_crs_mismatch(tmp_path: Path):
 
     with pytest.raises(ValueError, match="CRS mismatch"):
         run(FusionParams(lidar_summary=lidar_path, thermal_summary=thermal_path, out_path=out_path))
+
+
+# ---------------------------------------------------------------------------
+# CRS coordinate range validation tests
+# ---------------------------------------------------------------------------
+
+class TestCRSCoordinateValidation:
+    def test_warns_geographic_crs_with_projected_coords(self):
+        """Geographic CRS with large coordinate values should warn."""
+        dets = [{"x": 500000.0, "y": 6000000.0}]
+        with pytest.warns(UserWarning, match="coordinates exceed 360"):
+            _validate_coordinate_range(dets, "EPSG:4326")
+
+    def test_warns_projected_crs_with_degree_coords(self):
+        """Projected CRS with degree-range coordinates should warn."""
+        dets = [{"x": -65.5, "y": -42.1}]
+        with pytest.warns(UserWarning, match="coordinates < 360"):
+            _validate_coordinate_range(dets, "EPSG:32720")
+
+    def test_no_warning_for_valid_projected_coords(self):
+        """Projected CRS with projected coordinates should not warn."""
+        dets = [{"x": 500000.0, "y": 6000000.0}]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _validate_coordinate_range(dets, "EPSG:32720")
+
+    def test_no_warning_for_valid_geographic_coords(self):
+        """Geographic CRS with degree coordinates should not warn."""
+        dets = [{"x": -65.5, "y": -42.1}]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _validate_coordinate_range(dets, "EPSG:4326")
+
+    def test_no_warning_when_crs_is_none(self):
+        """No validation when CRS is None."""
+        dets = [{"x": 500000.0, "y": 6000000.0}]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _validate_coordinate_range(dets, None)
+
+    def test_no_warning_for_empty_detections(self):
+        """No validation when detections list is empty."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _validate_coordinate_range([], "EPSG:32720")

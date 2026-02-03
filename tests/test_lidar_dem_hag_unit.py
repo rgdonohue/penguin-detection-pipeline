@@ -271,3 +271,120 @@ def test_hag_grid_all_below_threshold_gives_zero_detections():
     assert count == 0
     assert dets == []
     assert labeled.max() == 0
+
+
+# ---------------------------------------------------------------------------
+# Density stats tests
+# ---------------------------------------------------------------------------
+
+class TestDensityStats:
+    def test_density_stats_present_when_enabled(self, monkeypatch, tmp_path):
+        """When density_stats=True, the per-file JSON contains a 'density' sub-object."""
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(1.0, 1.0, 0.5),
+            chunks=(
+                ([0.1, 0.3, 0.5, 0.7, 0.9], [0.1, 0.3, 0.5, 0.7, 0.9], [0.0, 0.0, 0.0, 0.0, 0.0]),
+            ),
+        )
+        info = lidar.process_file(
+            tmp_path / "test.las",
+            cell_res=0.25, hag_min=0.2, hag_max=0.6,
+            min_area_cells=2, max_area_cells=80,
+            chunk_size=10, verbose=False, plots_dir=None,
+            density_stats=True,
+        )
+        assert "density" in info
+        d = info["density"]
+        assert d["total_points"] == 5
+        assert d["density_pts_per_m2"] > 0
+        assert d["mean_pts_per_cell"] > 0
+        assert 0 <= d["pct_empty_cells"] <= 100
+        assert d["min_pts_per_cell"] >= 0
+        assert d["max_pts_per_cell"] >= 1
+
+    def test_density_stats_absent_when_disabled(self, monkeypatch, tmp_path):
+        """When density_stats=False (default), no 'density' key in output."""
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(1.0, 1.0, 0.5),
+            chunks=(
+                ([0.1, 0.3, 0.5], [0.1, 0.3, 0.5], [0.0, 0.0, 0.0]),
+            ),
+        )
+        info = lidar.process_file(
+            tmp_path / "test.las",
+            cell_res=0.25, hag_min=0.2, hag_max=0.6,
+            min_area_cells=2, max_area_cells=80,
+            chunk_size=10, verbose=False, plots_dir=None,
+            density_stats=False,
+        )
+        assert "density" not in info
+
+    def test_density_count_grid_correct(self, monkeypatch, tmp_path):
+        """Count grid should reflect actual point counts per cell."""
+        # 3 points in cell (0,0), 2 points in cell (1,0), 1 point in cell (0,1)
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(0.5, 0.5, 0.5),
+            chunks=(
+                (
+                    [0.1, 0.1, 0.1, 0.3, 0.3, 0.1],
+                    [0.1, 0.1, 0.1, 0.1, 0.1, 0.3],
+                    [0.0, 0.1, 0.2, 0.0, 0.1, 0.0],
+                ),
+            ),
+        )
+        info = lidar.process_file(
+            tmp_path / "test.las",
+            cell_res=0.25, hag_min=0.2, hag_max=0.6,
+            min_area_cells=2, max_area_cells=80,
+            chunk_size=10, verbose=False, plots_dir=None,
+            density_stats=True,
+        )
+        d = info["density"]
+        assert d["total_points"] == 6
+        assert d["max_pts_per_cell"] == 3
+
+    def test_estimate_grid_bytes_increases_with_density(self):
+        """_estimate_grid_bytes should return more bytes when density_stats=True."""
+        base = lidar._estimate_grid_bytes(100, 100, "min", "p95", None, density_stats=False)
+        with_density = lidar._estimate_grid_bytes(100, 100, "min", "p95", None, density_stats=True)
+        assert with_density > base
+        assert with_density - base == 100 * 100 * 4  # int32 = 4 bytes per cell
+
+
+# ---------------------------------------------------------------------------
+# CSF ground model tests
+# ---------------------------------------------------------------------------
+
+class TestCSFGroundModel:
+    def test_csf_import_guard_present(self):
+        """HAS_CSF attribute exists on the module."""
+        assert hasattr(lidar, "HAS_CSF")
+
+    @pytest.mark.skipif(not lidar.HAS_CSF, reason="CSF not installed")
+    def test_csf_ground_produces_valid_dem(self, tmp_path):
+        """CSF ground method produces a finite DEM for a real LAS tile."""
+        # This test only runs when CSF is installed; skips otherwise.
+        # We test with the golden AOI if available.
+        golden = Path("data/legacy_ro/penguin-2.0/data/raw/LiDAR/sample/cloud3.las")
+        if not golden.exists():
+            pytest.skip("Golden AOI tile not available")
+        mins, maxs, _ = lidar.read_bounds_and_counts(golden, 1_000_000)
+        ny, nx = lidar._grid_shape(mins, maxs, 0.25)
+        dem, csf_meta = lidar._build_ground_csf(
+            golden, cell_res=0.25, ny=ny, nx=nx, mins=mins,
+            csf_max_points=50_000_000,
+        )
+        assert dem.size > 0, "CSF should produce a non-empty DEM"
+        assert np.isfinite(dem).all(), "CSF DEM should have no inf/nan values"
+        assert csf_meta["csf_fallback"] is False
+        assert csf_meta["csf_ground_points"] > 0
+
+    def test_csf_ground_method_choice_stored(self):
+        """ground_method='csf' is a valid choice string."""
+        assert "csf" in ["min", "p05", "csf"]

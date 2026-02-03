@@ -107,3 +107,39 @@ clean:
 # - make thermal-ortho (full orthorectification once GDAL workflow is ready)
 # - make fusion (CLI exists; needs real input summaries with CRS x/y)
 # - make rollback (needs snapshot mechanism)
+
+# ---------------------------------------------------------------------------
+# Experiment targets
+# ---------------------------------------------------------------------------
+
+.PHONY: experiment-ground experiment-resolution experiment-watershed experiment-hag
+
+experiment-ground:
+	@echo "Running ground model comparison experiment..."
+	@.venv/bin/python scripts/experiments/compare_ground_models.py \
+		--tile "data/2025/Caleta Tiny Island/cloud0.las" \
+		--out data/interim/ground_model_comparison_caleta.json \
+		--crs-epsg 32720
+
+experiment-resolution:
+	@echo "Running resolution sweep experiment..."
+	@.venv/bin/python scripts/experiments/resolution_sweep.py \
+		--tile "data/2025/Caleta Tiny Island/cloud0.las" \
+		--out data/interim/resolution_sweep_caleta.json \
+		--crs-epsg 32720
+
+experiment-watershed:
+	@echo "Running watershed parameter sweep..."
+	@.venv/bin/python scripts/experiments/watershed_sweep.py \
+		--data-root "data/2025/Caleta Tiny Island" \
+		--aoi data/processed/aoi_caleta_tiny_island_epsg32720.geojson \
+		--out data/interim/watershed_sweep_caleta_tiny.json \
+		--crs-epsg 32720 --field-count 321
+
+experiment-hag:
+	@echo "Running HAG histogram analysis..."
+	@.venv/bin/python scripts/experiments/hag_histogram.py \
+		--tile "data/2025/Caleta Tiny Island/cloud0.las" \
+		--out data/interim/hag_histogram_caleta.json \
+		--plot data/interim/hag_histogram_caleta.png \
+		--crs-epsg 32720

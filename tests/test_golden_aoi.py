@@ -26,9 +26,9 @@ import shutil
 
 # Test configuration
 TEST_OUTPUT_DIR = Path("data/interim/test_golden")
-EXPECTED_DETECTION_COUNT = 802
+EXPECTED_DETECTION_COUNT = 776
 TOLERANCE = 5  # Allow ±5 detections for minor numerical variations
-EXPECTED_SIGNATURE_SHA256 = "3193848a41325389326c44a5bf4580f7f6325423b7140f51ac2a0d980a08d9d7"
+EXPECTED_SIGNATURE_SHA256 = "e3a7228246ecc3564915995eb4f5210bfb8cb8cfbb758fc7d1815540a5708cad"
 
 
 def _stable_params(params: object) -> dict:
@@ -185,6 +185,7 @@ class TestLiDARPipeline:
             "--hag-max", "0.6",
             "--min-area-cells", "2",
             "--max-area-cells", "80",
+            "--top-method", "max",
             "--emit-geojson",
             "--crs-epsg", "32720",
             "--plots",

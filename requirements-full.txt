@@ -7,6 +7,9 @@
 # Data Processing
 pandas>=2.3.3
 
+# Basemap tiles for static maps
+contextily>=1.5.0
+
 # ============================================================================
 # GDAL/Rasterio Installation (Required for Thermal/Fusion Stages)
 # ============================================================================
@@ -58,3 +61,7 @@ pandas>=2.3.3
 
 # PDAL for LiDAR (optional, if needed for advanced processing)
 # python-pdal>=3.2.0
+
+# CSF ground model (optional, for cloth-simulation-filter ground classification)
+# Install: pip install cloth-simulation-filter
+# cloth-simulation-filter>=1.1.0
