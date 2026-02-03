@@ -41,21 +41,18 @@ Project: Penguin Detection Pipeline v4.0
 
 **Expected completion:** Labeling takes approximately 1–2 hours per site. Once complete, `scripts/estimate_precision.py` produces Wilson score confidence intervals. Precision numbers and adjusted count estimates will follow immediately.
 
-## Action Required: AOI Boundary Confirmation
+## Coordinate Clarifications Needed
 
-**We cannot produce validated counts for San Lorenzo until we receive confirmed AOI boundaries.** The current polygons were constructed from sparse GPS waypoints and have known issues:
+We've been working from the GPS coordinates and annotated map screenshots in the field notes PDF. Most of the boundaries have been digitized and converted to AOI polygons. A few need clarification before we can produce validated counts:
 
-1. **San Lorenzo Road (359 penguins):** No boundary waypoints provided. We have no polygon.
-2. **San Lorenzo Caves box count (32 penguins):** Need the 4 corner coordinates.
-3. **San Lorenzo "Bushes" box count (55 penguins):** The coordinates in the PDF appear inconsistent — the polygon falls in the wrong tile.
-4. **Caleta box count sub-areas:** Boundaries needed.
+1. **"Bushes" box count (55 penguins):** The four GPS coordinates on p.4 of the field notes (42.085273 S / 63.866958 W, etc.) produce a ~200 m² polygon that falls inside LiDAR tile 11.9, which covers the Plains area — not where we'd expect the Bushes count. The reported area is 3.8 ha (~190x larger). Are these coordinates for a different box count, or internal waypoints within a larger area?
+2. **Caves box count (32 penguins):** We don't have corner coordinates for this one. Is it a sub-area within the larger Caves survey zone?
+3. **San Lorenzo Road (359 penguins):** The field notes show the road transect but no boundary polygon. Was this a fixed-width transect along the road, or a defined area?
+4. **Caleta box count sub-areas (~20 penguins each):** We have the Google Maps screenshots with polygons. Can you confirm which tiles these correspond to?
 
-When available, any of these formats would work:
-- Polygon layer (GeoJSON, KML, or shapefile)
-- Table of corner coordinates per AOI
-- Annotated screenshot on a basemap (we can digitize from this)
+We also noticed that LiDAR tiles `box_count_11.9` and `box_count_11.10` appear spatially swapped relative to the site zone names — 11.9 covers the Plains area and 11.10 covers Caves. Can you confirm which is which?
 
-Detailed request with specific coordinate questions: `notes/client_aoi_clarifications.md`
+Detailed notes: `notes/client_aoi_clarifications.md`
 
 ## What's Delivered
 
