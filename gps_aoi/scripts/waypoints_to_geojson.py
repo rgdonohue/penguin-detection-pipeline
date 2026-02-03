@@ -175,6 +175,12 @@ def build_plains_ring(typed_rows: list[tuple[float, float, str]], crs_epsg: int)
     bottom_edge = dedup(bottom_edge)
     if len(top_edge) < 2 or len(bottom_edge) < 2:
         return None
+    # Filter bottom_edge: remove points north of top edge (erroneous start points in CSV).
+    # In Southern Hemisphere, "north" = less negative lat.
+    northmost_top_lat = max(p[0] for p in top_edge)
+    bottom_edge = [p for p in bottom_edge if p[0] < northmost_top_lat - 0.00005]
+    if len(bottom_edge) < 2:
+        return None
     # Sort top west-to-east (ascending lon), bottom east-to-west (descending lon)
     top_sorted = sorted(top_edge, key=lambda p: p[1])
     bottom_sorted = sorted(bottom_edge, key=lambda p: p[1], reverse=True)

@@ -166,6 +166,13 @@ def build_plains_polygon(waypoints: dict) -> dict:
     top_edge = dedup(top_edge)
     bottom_edge = dedup(bottom_edge)
 
+    # Filter bottom_edge: remove points that are NORTH of the top edge.
+    # In Southern Hemisphere, "north" = less negative lat (closer to 0).
+    # The CSV has erroneous "bottom_edge" points that are actually start points
+    # on the north side, which cause self-intersection when sorted by lon.
+    northmost_top_lat = max(pt[0] for pt in top_edge)  # least negative = most north
+    bottom_edge = [pt for pt in bottom_edge if pt[0] < northmost_top_lat - 0.00005]
+
     # Sort top edge west-to-east (ascending longitude)
     top_sorted = sorted(top_edge, key=lambda p: p[1])
     # Sort bottom edge east-to-west (descending longitude) to trace back
