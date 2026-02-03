@@ -58,7 +58,7 @@
 - [ ] Dependencies installed successfully
 - [ ] **Validation passed:** `make validate`
   - [ ] Environment check: PASSED
-  - [ ] LiDAR smoke test: 802 detections on cloud3.las
+  - [ ] LiDAR smoke test: 776 detections on cloud3.las
   - [ ] 12 golden AOI tests: ALL PASSED
 
 ### Offline Capability Test

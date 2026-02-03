@@ -4,7 +4,7 @@ Date: 2026-02-02
 
 ## Purpose
 
-Assess whether LiDAR point cloud features beyond geometric filtering can discriminate penguins from false positives. The pipeline currently accepts detections based on height (0.28–0.48 m HAG) and size (0.19–3.75 m²) only. This analysis tests whether RGB color, NIR intensity, and derived indices add discriminative signal.
+Assess whether LiDAR point cloud features beyond geometric filtering can discriminate penguins from false positives. The pipeline currently accepts detections based on height (0.28–0.48 m HAG) and size (0.19–3.75 m², DJI L2 Caleta parameters at 0.25 m cell with min_area=3 and max_area=60) only. This analysis tests whether RGB color, NIR intensity, and derived indices add discriminative signal.
 
 ## Method
 
@@ -16,7 +16,7 @@ The primary comparison is inside-AOI vs outside-AOI detections. Inside-AOI detec
 
 | Site | Detections | Inside AOI | Outside AOI | Sensor |
 |------|-----------|-----------|-------------|--------|
-| Caleta Tiny Island | 340 | 315 | 25 | DJI L2 |
+| Caleta Tiny Island | 317 | ~315 | ~2 | DJI L2 |
 | Caleta Small Island | 1,473 | 1,473 | 0 | DJI L2 |
 | San Lorenzo Box Count | 2,011 | — | — | TrueView 515 |
 
@@ -73,7 +73,7 @@ Parameter sweeps were run on representative tiles from both sensors.
 | min_area_cells | 1–5 | 347 (constant) | No |
 | max_area_cells | 30–100 | 317–349 | No (10% variation) |
 
-The 2D hag_min × hag_max sweep confirms hag_max dominates: count rises steeply from ~8 (tight band) to ~396 (wide band). The chosen baseline (0.20–0.60 m) yields 347 detections.
+The 2D hag_min × hag_max sweep confirms hag_max dominates: count rises steeply from ~8 (tight band) to ~396 (wide band). The sweep baseline (0.20–0.60 m, the legacy golden range) yields 347 detections; the production Argentina parameters use 0.28–0.48 m.
 
 ### San Lorenzo Box Count (TrueView 515, box_count_11.9.las)
 
@@ -115,6 +115,21 @@ San Lorenzo shows the same pattern: hag_max is the dominant parameter. But the o
 - Label sample bundles (80 detections each, RGB+HAG crops):
   - `data/processed/label_samples/caleta_tiny_island/`
   - `data/processed/label_samples/caleta_small_island/`
+
+## Resolution and Point Density (February 2026 Experiments)
+
+Resolution sweep experiments confirmed that the current cell sizes are well-matched to sensor point density:
+
+| Sensor | Production Cell | Mean pts/cell | % Empty Cells |
+|--------|:---------:|----------:|----------:|
+| DJI L2 (Caleta) | 0.25 m | 9.1 | 59% |
+| TrueView 515 (San Lorenzo) | 0.30 m | 13.9 | 47% |
+
+Finer resolutions (0.10–0.15 m) produce 1.5–3.3 pts/cell with >60% empty cells, causing noise fragmentation and 5-12x over-detection. The production resolutions provide sufficient density for reliable blob detection while maintaining reasonable grid sizes.
+
+Ground model choice (`min` vs `p05`) has a site-dependent effect: +9.4% detections with `p05` on the open Caleta island, -1.0% on burrow-heavy San Lorenzo terrain. The `min` method remains the default.
+
+Full methodology details: `docs/reports/LIDAR_METHODOLOGY.md` §5.
 
 ## Next Steps
 

@@ -4,17 +4,17 @@ Automated detection of Magellanic penguins from drone LiDAR surveys, developed w
 
 ## How It Works
 
-Point clouds are normalized to height above ground (HAG), rasterized to a 0.25 m grid, and filtered to the 0.2–0.6 m height band (standing Magellanic penguin height). Connected-component analysis extracts blob candidates, and morphological filters remove objects outside the 0.125–5.0 m² size range. All outputs use EPSG:32720 (UTM Zone 20S). The pipeline is deterministic and regression-tested.
+Point clouds are normalized to height above ground (HAG), rasterized to a configurable grid, and filtered to a height band tuned for standing Magellanic penguins. Connected-component analysis extracts blob candidates, and morphological filters remove objects outside the target size range. Parameters are tuned per site and sensor. All outputs use EPSG:32720 (UTM Zone 20S). The pipeline is deterministic and regression-tested.
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Cell resolution | 0.25 m | Penguin-sized object detection |
-| HAG band | 0.2–0.6 m | Standing Magellanic penguin height |
-| Min area | 0.125 m² (2 cells) | Minimum penguin footprint |
-| Max area | 5.0 m² (80 cells) | Excludes rocks and vegetation |
-| Connectivity | 8-connected | Blob detection neighborhood |
+| Parameter | DJI L2 (Caleta) | TrueView 515 (San Lorenzo) |
+|-----------|-----------------|----------------------------|
+| Cell resolution | 0.25 m | 0.30 m |
+| HAG band | 0.28–0.48 m | 0.28–0.48 m |
+| Min area | 3 cells (0.19 m²) | 3 cells (0.27 m²) |
+| Max area | 60 cells (3.75 m²) | 50 cells (4.5 m²) |
+| Connectivity | 8-connected | 8-connected |
 
-For algorithm details see [LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md).
+The legacy Punta Tombo benchmark uses different defaults (0.25 m cell, 0.2–0.6 m HAG, 2–80 cells). For the full parameter reference and per-site validation, see [LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md).
 
 ## Quick Start
 
@@ -22,7 +22,7 @@ For algorithm details see [LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.
 # Setup
 make env && source .venv/bin/activate
 
-# Run LiDAR detection (proven — 802 detections on golden AOI)
+# Run LiDAR detection (proven — 776 detections on golden AOI)
 make test-lidar
 
 # Run regression tests
@@ -36,10 +36,12 @@ See [RUNBOOK.md](RUNBOOK.md) for full command reference and [DEVELOPMENT.md](DEV
 
 Field data from San Lorenzo and Caleta sites in Patagonia (Argentina 2025).
 
+![Study Sites](qc/panels/study_sites_map.png)
+
 | Site | Type | Sensors |
 |------|------|---------|
 | San Lorenzo Caves | Mainland, burrow-heavy | TrueView 515, H30T |
-| San Lorenzo Plains | Mainland, open nesting | TrueView 515, H30T |
+| San Lorenzo Plains | Mainland, mixed terrain | TrueView 515, H30T |
 | San Lorenzo Road | Mainland, mixed | TrueView 515, H30T |
 | Caleta Small Island | Open island colony | DJI L2, H30T |
 | Caleta Tiny Island | Open island colony | DJI L2, H30T |

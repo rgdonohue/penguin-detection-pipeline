@@ -20,7 +20,7 @@ This is the Penguin Detection Pipeline project (v4.0) - a production-oriented sy
 
 | Stage | Status | Notes |
 |-------|--------|-------|
-| **LiDAR Detection** | ✅ Production-ready | 802 detections on golden AOI (guardrail); `scripts/run_lidar_hag.py` proven |
+| **LiDAR Detection** | ✅ Production-ready | 776 detections on golden AOI (guardrail); `scripts/run_lidar_hag.py` proven |
 | **Thermal Extraction** | ⚠️ Research phase | 16-bit radiometric extraction working; ~9°C calibration offset unresolved |
 | **Thermal Camera Model** | ✅ Fixed | `rotation_from_ypr()` uses proper Euler ZYX in NED→ENU; det(R)=+1 verified |
 | **Thermal Detection** | ⚠️ Research phase | F1 scores 0.02-0.30 depending on frame contrast; 60/137 ground truth validated |
@@ -50,7 +50,7 @@ This is the Penguin Detection Pipeline project (v4.0) - a production-oriented sy
 ```
 penguins-4.0/
 ├── scripts/               # Entry point scripts for each pipeline stage
-│   ├── run_lidar_hag.py   # ✅ PROVEN - LiDAR detection (802 candidates)
+│   ├── run_lidar_hag.py   # ✅ PROVEN - LiDAR detection (776 candidates)
 │   ├── run_thermal_ortho.py  # ⚠️ Orthorectification (needs validation)
 │   ├── create_detection_map.py  # Folium web map from GeoJSON
 │   ├── analyze_san_lorenzo_counts.py  # Argentina ground truth analysis
@@ -102,7 +102,7 @@ make env && source .venv/bin/activate
 ### Working Commands (Tested)
 
 ```bash
-# LiDAR detection on golden AOI (PROVEN - 802 detections)
+# LiDAR detection on golden AOI (PROVEN - 776 detections)
 make test-lidar
 # QC golden guardrail (fast)
 make golden
@@ -130,14 +130,18 @@ python scripts/run_fusion_join.py \
 ## Key Technical Parameters
 
 ### LiDAR Processing (Tuned for Magellanic Penguins)
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Cell resolution | 0.25m | Higher resolution for penguin-sized objects |
-| HAG min | 0.2m | Minimum penguin height |
-| HAG max | 0.6m | Maximum penguin height |
-| Min area cells | 2 | ~0.125 m² minimum |
-| Max area cells | 80 | ~5 m² maximum (excludes rocks/vegetation) |
-| Connectivity | 2 | 8-connectivity for blob detection |
+
+Parameters are tuned per site and sensor. The Argentina 2025 values are:
+
+| Parameter | DJI L2 (Caleta) | TrueView 515 (San Lorenzo) |
+|-----------|-----------------|----------------------------|
+| Cell resolution | 0.25 m | 0.30 m |
+| HAG band | 0.28–0.48 m | 0.28–0.48 m |
+| Min area cells | 3 (~0.19 m²) | 3 (~0.27 m²) |
+| Max area cells | 60 (~3.75 m²) | 50 (~4.5 m²) |
+| Connectivity | 2 (8-connected) | 2 (8-connected) |
+
+The legacy Punta Tombo golden benchmark uses different defaults: 0.25 m cell, 0.2–0.6 m HAG, 2–80 cells.
 
 ### Thermal Processing (H30T / H20T Sensors)
 | Parameter | Value | Notes |
@@ -168,7 +172,7 @@ python scripts/run_fusion_join.py \
 
 | Gate | Criteria | Status |
 |------|----------|--------|
-| LiDAR | Reproducible 802 ± tolerance on cloud3.las | ✅ Passing |
+| LiDAR | Reproducible 776 ± tolerance on cloud3.las | ✅ Passing |
 | Camera Model | det(R)=+1 for all orientations including nadir | ✅ Passing |
 | Thermal Ortho | RMSE ≤ 2 px on control points | ⚠️ Needs validation (blocked on control points) |
 | Thermal Detection | Total count within 20% of 1533 | ❌ Not yet achieved (blocked on calibration) |
@@ -183,10 +187,10 @@ python scripts/run_fusion_join.py \
 | San Lorenzo Caves | 908 | 0.60 ha | 1,518/ha | TrueView 515, H30T |
 | San Lorenzo Plains | 453 | 0.98 ha | 464/ha | TrueView 515, H30T |
 | San Lorenzo Road | 359 | - | - | TrueView 515, H30T |
-| San Lorenzo Box Counts | 87 | 4.95 ha | 15-28/ha | H30T |
-| Caleta Small Island | 1,557 | 4.0 ha | 389/ha | L2, H30T |
-| Caleta Tiny Island | 321 | 0.7 ha | 459/ha | L2, H30T |
-| Caleta Box Counts | 20 | - | - | H30T |
+| San Lorenzo Box Counts | 87 | 4.95 ha | 15-28/ha | TrueView 515, H30T |
+| Caleta Small Island | 1,557 | 4.0 ha | 389/ha | DJI L2, H30T |
+| Caleta Tiny Island | 321 | 0.7 ha | 459/ha | DJI L2, H30T |
+| Caleta Box Counts | 20 | - | - | DJI L2, H30T |
 
 **Key observation:** Density varies 100x across sites (15 to 1,518 penguins/ha).
 

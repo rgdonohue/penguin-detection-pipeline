@@ -109,9 +109,23 @@ Recommended field approach:
 
 **Processing Parameters** (tuned on DJI L2 data):
 
-Two parameter sets serve different purposes:
+Three parameter sets serve different purposes:
 
-**Production Parameters** (calibrated for accurate colony counts with DJI L2 data):
+**Validated Argentina Parameters** (current production use — see RUNBOOK.md):
+```bash
+# DJI L2 (Caleta sites)
+--cell-res 0.25 --hag-min 0.28 --hag-max 0.48
+--min-area-cells 3 --max-area-cells 60
+--dedupe-radius-m 0.5
+
+# TrueView 515 (San Lorenzo)
+--cell-res 0.30 --hag-min 0.28 --hag-max 0.48
+--min-area-cells 3 --max-area-cells 50
+--dedupe-radius-m 0.5
+```
+**Results:** Caleta Tiny 315 AOI-clipped vs 321 field (0.98); Caleta Small 1,255 vs 1,557 (0.81).
+
+**Legacy "Tight" Parameters** (from early Punta Tombo optimization — not currently validated for Argentina):
 ```bash
 --cell-res 0.25           # Grid resolution (meters)
 --hag-min 0.38            # Min penguin height (meters)
@@ -125,7 +139,8 @@ Two parameter sets serve different purposes:
 --refine-size 5           # Refinement window
 --dedupe-radius-m 1.6     # Deduplication distance
 ```
-**Results with DJI L2**: 1,742 raw → **1,175 deduped** (matches ~1,100 manual count)
+**Results with DJI L2**: 1,742 raw → **1,175 deduped** (matches ~1,100 manual count on legacy Punta Tombo data).
+**Note:** These parameters were tuned on a different site and have not been validated against Argentina 2025 ground truth. The tighter HAG band (0.38–0.48 m) and stricter shape/area filters may reject valid detections at Argentina sites.
 
 **Golden Test Parameters** (for regression testing with DJI L2 data):
 ```bash
@@ -135,7 +150,7 @@ Two parameter sets serve different purposes:
 --min-area-cells 2        # Min size (more permissive)
 --max-area-cells 80       # Max size (more permissive)
 ```
-**Results with DJI L2**: 802 detections on cloud3.las (reproducibility benchmark)
+**Results with DJI L2**: 776 detections on cloud3.las (reproducibility benchmark, `--top-method max`)
 
 **IMPORTANT**: Parameters may need adjustment for TrueView 515 data due to different sensor characteristics.
 

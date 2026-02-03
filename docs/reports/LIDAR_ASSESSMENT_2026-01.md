@@ -26,7 +26,7 @@ The pipeline is deterministic, reproducible, and runs on 7 sensor/site combinati
 
 ### Pipeline Reliability
 
-- **Reproducibility:** Golden AOI test produces exactly 802 detections (SHA256-verified signature) across all runs.
+- **Reproducibility:** Golden AOI test produces exactly 776 detections (SHA256-verified signature) across all runs.
 - **Multi-sensor support:** Validated on both DJI L2 (Caleta) and TrueView 515 (San Lorenzo) point clouds.
 - **CRS handling:** Auto-detection from LAS headers with explicit override capability.
 - **Scalability:** Streaming architecture handles files up to 22 GB (754M points total) with configurable memory limits.

@@ -21,6 +21,8 @@ Points are streamed in chunks (default 1M points) and binned into grid cells. Fo
 
 An alternative `p05` ground method maintains online per-cell 5th-percentile estimates using a streaming quantile update with configurable learning rate. This is more robust to noise in the lowest returns but requires an additional streaming pass worth of state.
 
+A third option, `csf` (Cloth Simulation Filter), uses a physics-based cloth simulation to classify ground vs non-ground points. Unlike `min` and `p05`, CSF requires loading all points at once (not streaming). A memory guard (`--csf-max-points`, default 20M) triggers automatic fallback to `p05` for oversized tiles. CSF is an optional dependency (`pip install cloth-simulation-filter`); if not installed and `--ground-method csf` is requested, the pipeline exits with a clear installation message.
+
 ### 2.2 HAG Computation
 
 A second streaming pass computes height-above-ground per point (`z - DEM[cell]`) and tracks the per-cell maximum (or p95 quantile via online tracking). The result is a 2D grid where each cell contains the tallest above-ground feature height.
@@ -64,8 +66,8 @@ An optional Z-score cap (`--top-zscore-cap`) clips outlier HAG values beyond `me
 
 | Parameter | CLI Flag | Default | Description |
 |-----------|----------|---------|-------------|
-| Ground method | `--ground-method` | min | `min` or `p05` quantile estimator |
-| Top method | `--top-method` | p95 | `max` or `p95` quantile estimator |
+| Ground method | `--ground-method` | min | `min`, `p05` quantile estimator, or `csf` (Cloth Simulation Filter; requires `cloth-simulation-filter` package) |
+| Top method | `--top-method` | max | `max` (recommended) or `p95` quantile estimator (has convergence issues) |
 | Z-score cap | `--top-zscore-cap` | 3.0 | Cap top surface outliers beyond mean + cap*std |
 | Quantile LR | `--top-quantile-lr` | 0.05 | Learning rate for online quantile tracking |
 
@@ -87,6 +89,14 @@ An optional Z-score cap (`--top-zscore-cap`) clips outlier HAG values beyond `me
 | h-maxima height | `--h-maxima` | 0.05 | Height parameter for seed extraction (m) |
 | Min split area | `--min-split-area-cells` | 12 | Only split blobs larger than this |
 
+### CSF Ground Model
+
+| Parameter | CLI Flag | Default | Description |
+|-----------|----------|---------|-------------|
+| Cloth resolution | `--csf-cloth-resolution` | 0.5 | CSF cloth resolution in meters |
+| Class threshold | `--csf-class-threshold` | 0.3 | CSF classification distance threshold (meters) |
+| Max points | `--csf-max-points` | 20,000,000 | CSF memory guard; falls back to p05 above this |
+
 ### Terrain and Memory
 
 | Parameter | CLI Flag | Default | Description |
@@ -95,6 +105,7 @@ An optional Z-score cap (`--top-zscore-cap`) clips outlier HAG values beyond `me
 | Max grid MB | `--max-grid-mb` | 512 | Memory limit per tile grid estimate |
 | Skip oversized | `--skip-oversized-tiles` | off | Skip (rather than fail) oversized tiles |
 | Dedupe radius | `--dedupe-radius-m` | None | Cross-tile deduplication radius (meters) |
+| Density stats | `--density-stats` | off | Compute per-tile point density statistics |
 
 ### Output Options
 
@@ -130,16 +141,77 @@ Detection counts are highly sensitive to the spatial extent used for clipping. S
 
 Different LiDAR sensors require different parameter settings. DJI L2 (Caleta) and TrueView 515 (San Lorenzo) have different point densities, noise characteristics, and return patterns. The default parameters are tuned for the legacy Punta Tombo dataset.
 
-## 5. Per-Site Validation Results
+## 5. Experiment Results (February 2026)
 
-| Site | Sensor | Ground Truth | Candidates | Ratio | Cell (m) | HAG Range (m) | Confidence |
-|------|--------|------------:|----------:|------:|--------:|-------------:|------------|
-| Caleta Tiny Island | DJI L2 | 321 | 315 | 0.98 | 0.25 | 0.28–0.48 | High — closed boundary, LiDAR-derived AOI |
-| Caleta Small Island | DJI L2 | 1,557 | 1,255 | 0.81 | 0.25 | 0.28–0.48 | High — LiDAR-derived AOI |
-| San Lorenzo Caves | TrueView 515 | 908 | 263 | 0.29 | 0.30 | 0.28–0.48 | Low — approximate AOI, burrow-dominated |
-| San Lorenzo Plains | TrueView 515 | 453 | 86 | 0.19 | 0.30 | 0.28–0.48 | Low — approximate AOI, sparse density |
+### 5.1 Resolution Sweep
 
-**Legacy benchmark (Punta Tombo):** Golden AOI produces exactly 802 detections with SHA256-verified signature, cell 0.25m, HAG 0.20–0.60m.
+Cell sizes [0.10, 0.15, 0.20, 0.25, 0.30] m were tested on representative tiles from each sensor.
+
+| Cell (m) | Caleta (DJI L2) | | San Lorenzo (TrueView 515) | |
+|----------|---:|---:|---:|---:|
+| | Detections | pts/cell | Detections | pts/cell |
+| 0.10 | 2,105 | 1.5 | 2,165 | 1.6 |
+| 0.15 | 811 | 3.3 | 1,641 | 3.5 |
+| 0.20 | 376 | 5.8 | 1,101 | 6.2 |
+| **0.25** | **171** | **9.1** | 757 | 9.7 |
+| **0.30** | 99 | 13.1 | **512** | **13.9** |
+
+**Findings:** At 0.10 m, >63% of cells are empty and mean points per cell is ~1.5 — far below Nyquist requirements. The current production resolutions (0.25 m for DJI L2, 0.30 m for TrueView 515) are well-justified, providing 9-14 pts/cell. Finer resolutions produce noise fragmentation without improving detection quality.
+
+**Data:** `data/interim/resolution_sweep_caleta.json`, `data/interim/resolution_sweep_san_lorenzo.json`
+
+### 5.2 Ground Model Comparison
+
+Detection counts under `min` vs `p05` ground methods (CSF not tested — optional dependency not installed).
+
+| Sensor / Site | min | p05 | Delta |
+|--------------|----:|----:|------:|
+| DJI L2 / Caleta Tiny | 171 | 187 | +9.4% |
+| TrueView 515 / San Lorenzo | 512 | 507 | -1.0% |
+
+**Findings:** Ground method effect is site-dependent. On the open island (Caleta), `p05` smooths out sparse low-noise outliers and raises the DEM slightly, producing more detections. On burrow terrain (San Lorenzo), the effect reverses — `p05` raises the DEM enough to suppress some shallow detections. Neither method is universally better; `min` remains the safe default.
+
+DEM difference statistics (min minus p05): Caleta mean -0.002 m (std 0.028 m); San Lorenzo mean -0.015 m (std 0.089 m). San Lorenzo terrain is rougher, so the ground method choice matters more there.
+
+**Data:** `data/interim/ground_model_comparison_caleta.json`, `data/interim/ground_model_comparison_san_lorenzo.json`
+
+### 5.3 HAG Distribution Analysis
+
+HAG histograms (0.01 m bins, 0–2.0 m) with Gaussian-smoothed peak detection.
+
+| Site | Peaks Found | Peak Location | Prominence | Suggested Range |
+|------|----------:|-------------:|----------:|----------------|
+| Caleta Tiny (DJI L2) | 1 | 0.555 m | 0.008 | 0.41–0.71 m |
+| San Lorenzo (TrueView 515) | 0 | — | — | — |
+
+**Findings:** Caleta shows a clear penguin-height mode at 0.555 m, above the current `hag_max=0.48` ceiling. However, testing widened bands (0.55, 0.60, 0.65 m) produced 532, 638, and 730 total detections respectively — all far above the 321 field count. The current narrow band (0.28–0.48 m) is well-tuned; the morphology and shape filters work best in this range.
+
+San Lorenzo shows no penguin peak — the HAG distribution is flat, consistent with burrow occlusion dominating the signal. This confirms that HAG-band tuning alone cannot improve detection at burrow-heavy sites.
+
+**Data:** `data/interim/hag_histogram_caleta.json`, `data/interim/hag_histogram_san_lorenzo.json`
+
+### 5.4 Watershed Splitting (Caleta Tiny)
+
+Parameter sweep: watershed off (baseline) + 20 configurations (h_maxima × min_split_area_cells).
+
+**Findings:** Baseline AOI-clipped count is 143. Best watershed configuration added +7 detections (+5%). The marginal gain does not justify the added complexity or parameter sensitivity. Watershed splitting is not recommended for production use at current resolutions.
+
+**Data:** `data/interim/watershed_sweep_caleta_tiny.json`
+
+### 5.5 Top-Method Correction
+
+The `--top-method p95` online quantile estimator (rewritten at commit `76b01fc`) does not converge properly, producing ~3.4x over-detection. The CLI default was changed to `--top-method max` in February 2026. With `max`, Caleta Tiny produces 317 total detections vs 321 field count (0.99 ratio). The golden baseline was updated from 802 to 776 accordingly.
+
+## 6. Per-Site Validation Results
+
+| Site | Sensor | Ground Truth | Candidates | Ratio | Cell (m) | HAG Range (m) | Area Cells | Parameter Set | Confidence |
+|------|--------|------------:|----------:|------:|--------:|-------------:|----------:|--------------|------------|
+| Caleta Tiny Island | DJI L2 | 321 | 315 | 0.98 | 0.25 | 0.28–0.48 | 3–60 | DJI L2 (Caleta) | High — closed boundary, LiDAR-derived AOI |
+| Caleta Small Island | DJI L2 | 1,557 | 1,255 | 0.81 | 0.25 | 0.28–0.48 | 3–60 | DJI L2 (Caleta) | High — LiDAR-derived AOI |
+| San Lorenzo Caves | TrueView 515 | 908 | 263 | 0.29 | 0.30 | 0.28–0.48 | 3–50 | TrueView 515 (San Lorenzo) | Low — approximate AOI, burrow-dominated |
+| San Lorenzo Plains | TrueView 515 | 453 | 86 | 0.19 | 0.30 | 0.28–0.48 | 3–50 | TrueView 515 (San Lorenzo) | Low — approximate AOI, sparse density |
+
+**Legacy benchmark (Punta Tombo):** Golden AOI produces exactly 776 detections with SHA256-verified signature, cell 0.25m, HAG 0.20–0.60m, area 2–80 cells, top-method max.
 
 ### Interpretation Guide
 
@@ -147,11 +219,11 @@ Different LiDAR sensors require different parameter settings. DJI L2 (Caleta) an
 - **Ratio 0.5–0.9:** Expected range given burrow occlusion and parameter sensitivity.
 - **Ratio < 0.3:** Likely dominated by AOI boundary error, parameter mismatch, or terrain complexity (burrow-heavy sites).
 
-## 6. Quality Gates
+## 7. Quality Gates
 
 | Gate | Criteria | Status |
 |------|----------|--------|
-| Golden AOI reproducibility | Exactly 802 detections, SHA256 signature match | Passing |
+| Golden AOI reproducibility | Exactly 776 detections, SHA256 signature match | Passing |
 | CRS contracts | Output CRS matches input or explicit override | Passing |
 | Grid memory safety | Tile grid estimate vs `--max-grid-mb` limit | Passing |
 | Parameter validation | All CLI params checked before processing | Passing |

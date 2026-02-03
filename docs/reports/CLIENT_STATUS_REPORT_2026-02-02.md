@@ -18,7 +18,7 @@ Project: Penguin Detection Pipeline v4.0
 | Caleta Tiny Island | Open island | 321 | 315 | **0.98** | 85–95% (pending labeling) |
 | Caleta Small Island | Open island | 1,557 | 1,255 | **0.81** | Similar expected |
 | San Lorenzo Caves | Burrow-heavy | 908 | 263 | 0.29 | Unknown |
-| San Lorenzo Plains | Burrow-heavy | 453 | 86 | 0.19 | Unknown |
+| San Lorenzo Plains | Mixed terrain | 453 | 86 | 0.19 | Unknown |
 
 **Detection rate** = candidates / field count. Below 1.0 means under-detection — the pipeline finds fewer candidates than field teams counted penguins.
 
@@ -50,7 +50,7 @@ Project: Penguin Detection Pipeline v4.0
 3. **San Lorenzo "Bushes" box count (55 penguins):** The coordinates in the PDF appear inconsistent — the polygon falls in the wrong tile.
 4. **Caleta box count sub-areas:** Boundaries needed.
 
-**Please provide by Feb 14** in any of these formats:
+When available, any of these formats would work:
 - Polygon layer (GeoJSON, KML, or shapefile)
 - Table of corner coordinates per AOI
 - Annotated screenshot on a basemap (we can digitize from this)
@@ -68,6 +68,17 @@ Detailed request with specific coordinate questions: `notes/client_aoi_clarifica
 | Label sample bundles (2 sites, 80 samples each, RGB+HAG crops) | Complete |
 | Precision estimates with confidence intervals | Pending labeling |
 | Validated per-site count table | Pending labeling + AOI confirmation |
+
+## Recent Engineering Work (December–January)
+
+Between the initial detection results and this report, we ran a series of systematic experiments to validate parameter choices and explore improvement paths:
+
+- **Resolution analysis:** Tested cell sizes from 0.10 m to 0.30 m on both sensors. Confirmed that the current production resolutions (0.25 m for DJI L2, 0.30 m for TrueView 515) are well-matched to point density (~9–14 points per cell). Finer resolutions degrade detection quality due to empty cells.
+- **Ground model comparison:** Compared minimum-Z vs 5th-percentile ground estimation. Effect is site-dependent (+9% detections on open island, -1% on burrow terrain). Current method is appropriate.
+- **Height band validation:** HAG histogram analysis identified a clear penguin-height signal at 0.555 m on the open island. Tested widening the detection band — overcounts by 2x. Current narrow band (0.28–0.48 m) is well-tuned.
+- **Pipeline bug fix:** Identified and corrected a convergence issue in an internal estimator. The fix tightened detection counts slightly (total candidates dropped from 340 to 317 on Caleta Tiny; AOI-clipped count unchanged at ~315). Regression test suite updated accordingly.
+
+Full experiment results are documented in the methodology report (`docs/reports/LIDAR_METHODOLOGY.md` §5).
 
 ## Thermal–LiDAR Cross-Reference (San Lorenzo)
 

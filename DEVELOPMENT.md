@@ -33,7 +33,7 @@ Hardware: 16 GB RAM minimum (32 GB recommended for large LiDAR files), 50 GB fre
 
 The pipeline produces deterministic results — the same input always gives the same output:
 
-- **Golden AOI baseline:** Running `make golden` produces exactly 802 detections on the test tile, verified by SHA256 hash
+- **Golden AOI baseline:** Running `make golden` produces exactly 776 detections on the test tile, verified by SHA256 hash
 - **Test suite:** 108 automated tests including regression baselines
 - **Provenance tracking:** Outputs include metadata recording parameters, CRS, and input files
 - All algorithms are deterministic; there are no stochastic components

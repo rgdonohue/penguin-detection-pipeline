@@ -13,7 +13,7 @@ Last updated: 2026-02-02 UTC
 
 - **Script:** `scripts/run_lidar_hag.py` (620+ lines, streaming architecture)
 - **Dependencies:** `pipelines/utils/provenance.py`, laspy, scipy, scikit-image
-- **Golden AOI baseline:** 802 candidates on cloud3.las (guardrail test)
+- **Golden AOI baseline:** 776 candidates on cloud3.las (guardrail test, `--top-method max`)
 - **Outputs:** JSON, GeoJSON, QC plots, provenance tracking
 - **Makefile target:** `make test-lidar`
 
@@ -23,7 +23,7 @@ Last updated: 2026-02-02 UTC
 - 25.8 GB across DJI L2 and TrueView 515 sensors
 
 **Validation Progress (2026-02-02):**
-- AOI-clipped evaluation complete for Caleta sites (315/340 inside AOI at Tiny Island; 1,473/1,473 at Small Island)
+- AOI-clipped evaluation complete for Caleta sites (~315/317 inside AOI at Tiny Island; 1,255/1,473 at Small Island)
 - Per-detection feature extraction done for 3 sites (Caleta Tiny, Caleta Small, San Lorenzo box count) — RGB, intensity, greenness, morphological features
 - Cross-sensor comparison (DJI L2 vs TrueView 515): intensity scales incompatible; greenness index transfers across sensors
 - Parameter sweep on 2 tiles: hag_max is dominant sensitivity parameter at both sites
@@ -47,7 +47,7 @@ Last updated: 2026-02-02 UTC
 - **Makefile:** Working targets for env, test, test-lidar, clean ✅
 
 **Test Suite (core):**
-- `tests/test_golden_aoi.py` ✅ (guardrail baseline: 802)
+- `tests/test_golden_aoi.py` ✅ (guardrail baseline: 776)
 - `tests/test_lidar_dem_hag_unit.py` ✅
 - `tests/test_thermal.py` ✅ (GDAL-dependent tests may skip)
 - `tests/test_thermal_radiometric.py` ✅ (data-dependent tests may skip)
@@ -157,27 +157,29 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 ### Completed (this sprint)
 
 1. ~~**Define detection semantics**~~ — ✅ Done (`pipelines/contracts.py`): candidates (blob centroids), not guaranteed individuals
-2. ~~**Implement AOI-clipped evaluation**~~ — ✅ Done (`pipelines/aoi_eval.py`): Caleta Tiny 315/340, Caleta Small 1473/1473
+2. ~~**Implement AOI-clipped evaluation**~~ — ✅ Done (`pipelines/aoi_eval.py`): Caleta Tiny ~315/317, Caleta Small 1255/1473
 3. ~~**Lock top-surface estimator**~~ — ✅ Using `max` (deterministic) for all validation work
 4. ~~**Feature analysis**~~ — ✅ Done: RGB, intensity, greenness, morphological for 3 sites across 2 sensors
 5. ~~**Label sample generation**~~ — ✅ Done: 80-sample bundles for Caleta Tiny + Caleta Small with RGB+HAG crops
 
+6. ~~**Top-method bug fix**~~ — ✅ Done: CLI default changed from `p95` to `max`; golden baseline updated 802→776; Caleta Tiny 317 total (vs 321 field = 0.99 ratio)
+7. ~~**Pipeline experiments**~~ — ✅ Done (Feb 2026): resolution sweep, ground model comparison, HAG histogram, watershed sweep on 2 sensors/sites. See `docs/reports/LIDAR_METHODOLOGY.md` §5.
+8. ~~**Thermal discrimination POC**~~ — ✅ Done (negative result): oblique thermal at burrow sites does not discriminate penguins from empty burrows
+
 ### Immediate (in progress)
 
-6. **Manual labeling** of label sample bundles → precision estimation via `scripts/estimate_precision.py`
-7. **Feature-by-label analysis** — after labels, plot TP vs FP feature distributions
-8. ~~**Thermal discrimination POC**~~ — ✅ Done (negative result): oblique thermal at burrow sites does not discriminate penguins from empty burrows
+9. **Manual labeling** of label sample bundles → precision estimation via `scripts/estimate_precision.py`
+10. **Feature-by-label analysis** — after labels, plot TP vs FP feature distributions
 
 ### Short-term
 
-10. Complete legacy ground truth (4 frames, 77 penguins)
-11. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
+11. Complete legacy ground truth (4 frames, 77 penguins)
+12. Run full legacy LiDAR dataset (35 GB, cloud0-4.las)
 
 ### Medium-term
 
 13. Georeference Argentina GPS waypoints
 14. Resolve thermal calibration (investigate 9°C and 30°C offsets) — lower priority after negative discrimination POC
-15. Ground model experiment — compare `min` vs `p05` vs CSF on same data with AOI clipping
 
 ---
 

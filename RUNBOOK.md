@@ -46,7 +46,7 @@ source .venv/bin/activate
 # 3. Install dependencies from requirements.txt
 # 4. Validate all required modules
 # 5. Check legacy data mounts
-# 6. Run LiDAR smoke test (802 detections expected on golden AOI)
+# 6. Run LiDAR smoke test (776 detections expected on golden AOI)
 # 7. Run golden AOI test suite (12 tests)
 ```
 
@@ -147,7 +147,7 @@ python3 scripts/run_lidar_hag.py \
 ```json
 {
   "files": 1,
-  "total_count": 802
+  "total_count": 776
 }
 ```
 
@@ -357,7 +357,7 @@ python3 scripts/run_lidar_hag.py \
   --min-area-cells 3 --max-area-cells 60 \
   --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
 
-# Caleta Tiny Island (validated: 340 detections vs 321 ground truth = +6%)
+# Caleta Tiny Island (validated: 317 detections vs 321 ground truth = -1%)
 python3 scripts/run_lidar_hag.py \
   --data-root "data/2025/Caleta Tiny Island" \
   --out data/interim/caleta_tiny_island.json \
@@ -437,6 +437,13 @@ python scripts/create_argentina_map.py \
   --lidar-coverage data/processed/lidar_coverage_wgs84.geojson \
   --aoi-catalogue data/processed/aoi_catalogue_wgs84.geojson \
   --output qc/panels/argentina_aoi_overview.html
+```
+
+**Study sites static map (README image):** requires `contextily` (see `requirements-full.txt`).
+
+```bash
+python scripts/create_study_sites_map.py
+# Output: qc/panels/study_sites_map.png
 ```
 
 ---
@@ -610,6 +617,67 @@ This invokes `scripts/run_thermal_smoketest.py`, summarising one frame per intak
 
 ---
 
+## Experiments
+
+### Ground Model Comparison (min vs p05 vs CSF)
+
+```bash
+python scripts/experiments/compare_ground_models.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/ground_model_comparison_caleta.json --crs-epsg 32720
+```
+
+Requires `cloth-simulation-filter` for CSF; min and p05 run regardless. Outputs JSON + multi-panel comparison PNG.
+
+### Resolution Sweep
+
+```bash
+python scripts/experiments/resolution_sweep.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/resolution_sweep_caleta.json --crs-epsg 32720
+```
+
+Tests cell sizes [0.10, 0.15, 0.20, 0.25, 0.30] m. Self-contained density stats per resolution.
+
+### Watershed Parameter Sweep
+
+```bash
+python scripts/experiments/watershed_sweep.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --aoi data/processed/aoi_caleta_tiny_island_epsg32720.geojson \
+  --out data/interim/watershed_sweep_caleta_tiny.json --crs-epsg 32720 \
+  --field-count 321
+```
+
+21 configurations (1 baseline + 20 watershed combos). Uses AOI-clipped counts.
+
+### HAG Histogram Analysis
+
+```bash
+python scripts/experiments/hag_histogram.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/hag_histogram_caleta.json \
+  --plot data/interim/hag_histogram_caleta.png --crs-epsg 32720
+```
+
+Per-tile HAG distribution with peak detection and suggested threshold range.
+
+### Density Stats
+
+Add `--density-stats` to any `run_lidar_hag.py` invocation to include per-tile density metrics (`total_points`, `density_pts_per_m2`, `mean_pts_per_cell`, `pct_empty_cells`, `min/max_pts_per_cell`) in the output JSON.
+
+```bash
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/caleta_tiny_density.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --crs-epsg 32720 \
+  --density-stats
+```
+
+---
+
 ## Not Yet Implemented
 
 These commands are planned but don't work yet:
@@ -705,7 +773,7 @@ make golden
 # Check detection count
 jq '.total_count' data/interim/lidar_test.json
 
-# Expected: 802
+# Expected: 776
 
 # Check file sizes
 ls -lh data/interim/lidar_hag_plots/
@@ -719,6 +787,64 @@ make clean
 
 # Or manually:
 rm -rf data/interim/*
+```
+
+---
+
+## Experiment Scripts
+
+### Resolution Sweep
+
+```bash
+# Test detection at varying cell sizes (0.10-0.30 m)
+.venv/bin/python scripts/experiments/resolution_sweep.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/resolution_sweep_caleta.json --crs-epsg 32720
+
+# San Lorenzo (TrueView 515)
+.venv/bin/python scripts/experiments/resolution_sweep.py \
+  --tile "data/2025/San_Lorenzo_UTM/box_count_11.9.las" \
+  --out data/interim/resolution_sweep_san_lorenzo.json --crs-epsg 32720
+```
+
+### Ground Model Comparison
+
+```bash
+# Compare min vs p05 (vs CSF if installed) ground models
+.venv/bin/python scripts/experiments/compare_ground_models.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/ground_model_comparison_caleta.json --crs-epsg 32720
+
+.venv/bin/python scripts/experiments/compare_ground_models.py \
+  --tile "data/2025/San_Lorenzo_UTM/box_count_11.9.las" \
+  --out data/interim/ground_model_comparison_san_lorenzo.json \
+  --crs-epsg 32720 --cell-res 0.30
+```
+
+### HAG Histogram Analysis
+
+```bash
+# Per-tile HAG distribution with peak detection
+.venv/bin/python scripts/experiments/hag_histogram.py \
+  --tile "data/2025/Caleta Tiny Island/cloud0.las" \
+  --out data/interim/hag_histogram_caleta.json \
+  --plot data/interim/hag_histogram_caleta.png --crs-epsg 32720
+
+.venv/bin/python scripts/experiments/hag_histogram.py \
+  --tile "data/2025/San_Lorenzo_UTM/box_count_11.9.las" \
+  --out data/interim/hag_histogram_san_lorenzo.json \
+  --plot data/interim/hag_histogram_san_lorenzo.png \
+  --crs-epsg 32720 --cell-res 0.30
+```
+
+### Watershed Sweep
+
+```bash
+# Parameter sweep: watershed on/off × h_maxima × min_split_area_cells
+.venv/bin/python scripts/experiments/watershed_sweep.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --aoi data/processed/aoi_caleta_tiny_island_epsg32720.geojson \
+  --out data/interim/watershed_sweep_caleta_tiny.json --crs-epsg 32720
 ```
 
 ---

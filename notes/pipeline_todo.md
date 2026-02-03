@@ -35,7 +35,7 @@ We track progress in two parallel lanes:
 
 | Test | Status | Notes |
 |------|--------|-------|
-| `tests/test_golden_aoi.py` | ✅ | Golden AOI baseline: 802 (guardrail) |
+| `tests/test_golden_aoi.py` | ✅ | Golden AOI baseline: 776 (guardrail, `--top-method max`) |
 | `tests/test_lidar_dem_hag_unit.py` | ✅ | DEM/HAG edge cases + quantile invariance |
 | `tests/test_thermal.py` | ✅ | GDAL-dependent tests may skip |
 | `tests/test_thermal_radiometric.py` | ✅ | Data-dependent integration cases may skip |
@@ -260,7 +260,7 @@ Argentina data currently provides **region totals** (~3,705 counts), not per-pen
 - [x] Create requirements.txt with pinned dependencies
 - [x] Implement `scripts/run_lidar_hag.py`
 - [x] Create `tests/test_golden_aoi.py` (12 tests)
-- [x] Validate 802 detection baseline on cloud3.las
+- [x] Validate 776 detection baseline on cloud3.las (`--top-method max`, updated Feb 2026)
 
 ### Thermal Infrastructure (Oct 2025)
 - [x] Extract thermal ortho script from legacy
