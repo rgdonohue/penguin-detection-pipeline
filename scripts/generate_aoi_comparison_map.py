@@ -182,7 +182,7 @@ def main():
     cbar.set_label("Mean HAG (m)", fontsize=10)
 
     # Plot AOI polygons
-    colors = ["#2ecc71", "#3498db"]  # Green for caves, blue for plains
+    colors = ["#2ecc71", "#3498db", "#8a5a9a", "#c4a35a"]  # Caves, Plains, Road, Box Bushes
     for i, aoi in enumerate(aoi_data):
         coords = aoi["coords"]
         if len(coords) > 0:
@@ -322,11 +322,13 @@ def main():
     _add_scale_bar(ax, _nice_scale_length(x_range * 0.2))
     _add_north_arrow(ax)
 
-    # Legend for AOIs
-    legend_patches = [
-        mpatches.Patch(color=colors[0], alpha=0.3, label="High Density Caves AOI"),
-        mpatches.Patch(color=colors[1], alpha=0.3, label="The Plains AOI"),
-    ]
+    # Legend for AOIs (dynamically built from loaded data)
+    legend_patches = []
+    for i, aoi in enumerate(aoi_data):
+        color = colors[i % len(colors)]
+        legend_patches.append(
+            mpatches.Patch(color=color, alpha=0.3, label=f"{aoi['name']} AOI")
+        )
     ax.legend(handles=legend_patches, loc="lower left", fontsize=9)
 
     # Layout

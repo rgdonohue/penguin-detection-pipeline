@@ -12,12 +12,12 @@
 | San Lorenzo Plains | 453 | 86 | — | 0.19 | GPS waypoints (perimeter winding) | 0.73 | AOI approximate; low density, sparse detections |
 | San Lorenzo Bushes Box | 55 | TBD | — | TBD | GPS corners (PDF) | 0.02 | **CAVEAT:** GPS corners may be mislabeled (see validation doc) |
 | San Lorenzo Caves Box | 32 | N/A | — | N/A | Missing | — | No GPS corners provided |
-| San Lorenzo Road | 359 | N/A | — | N/A | Missing | — | No waypoints documented |
+| San Lorenzo Road | 359 | 281 | — | 0.78 | Digitized from field notes | 1.09 | Open terrain; boundary needs confirmation |
 | Caleta Box Count 1 | ~20 | TBD | — | TBD | Missing | — | Needs digitized polygon |
 | Caleta Box Count 2 | ~20 | TBD | — | TBD | Missing | — | Needs digitized polygon |
 
 **Total accountable ground truth:** ~3,705 penguins across all sites.
-**Currently evaluable:** ~2,786 penguins (Caleta Tiny + Small + San Lorenzo Caves + Plains).
+**Currently evaluable:** ~3,145 penguins (Caleta Tiny + Small + San Lorenzo Caves + Plains + Road).
 
 ## Key Caveats
 

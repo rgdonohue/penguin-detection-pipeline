@@ -142,7 +142,6 @@ def main() -> int:
     args = parser.parse_args()
 
     san_lorenzo_path = PROJECT_ROOT / "data" / "processed" / "aoi_san_lorenzo_epsg5345.geojson"
-    san_lorenzo_boxes_path = PROJECT_ROOT / "data" / "processed" / "aoi_san_lorenzo_boxes_wgs84.geojson"
     caleta_islands_path = PROJECT_ROOT / "data" / "processed" / "aoi_caleta_islands_epsg32720.geojson"
     caleta_ground_truth_path = PROJECT_ROOT / "data" / "processed" / "aoi_caleta_small_island_ground_truth_epsg32720.geojson"
 
@@ -151,13 +150,10 @@ def main() -> int:
     san_lorenzo_confidence = {
         "san_lorenzo_caves": ("reconstructed", "Waypoints + estimated left edge."),
         "san_lorenzo_plains": ("reconstructed", "Top/bottom edge waypoints; lateral bounds estimated."),
+        "san_lorenzo_box_bushes": ("confirmed", "4-corner GPS coordinates from PDF."),
+        "san_lorenzo_road": ("confirmed", "Convex hull of 34 GPS waypoints."),
     }
     features.extend(load_source_features(san_lorenzo_path, 5345, san_lorenzo_confidence))
-
-    boxes_confidence = {
-        "san_lorenzo_bushes_box": ("confirmed", "4-corner GPS coordinates from PDF."),
-    }
-    features.extend(load_source_features(san_lorenzo_boxes_path, 4326, boxes_confidence))
 
     # Caleta LiDAR coverage polygons (full island footprints)
     caleta_coverage_confidence = {
@@ -176,7 +172,7 @@ def main() -> int:
         }
         features.extend(load_source_features(caleta_ground_truth_path, 32720, caleta_gt_confidence))
 
-    # Note: Missing AOI markers (The Road, Box Count - Caves, Caleta Box Counts)
+    # Note: Missing AOI markers (Box Count - Caves, Caleta Box Counts)
     # are intentionally omitted. We have penguin counts but no boundary data,
     # and vague point markers at estimated locations are not useful for the map.
     # Counts are preserved in san_lorenzo_analysis.json for reference.

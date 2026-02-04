@@ -151,6 +151,8 @@ def build_plains_polygon(waypoints: dict) -> dict:
     """
     top_edge = waypoints.get("top_edge", [])
     bottom_edge = waypoints.get("bottom_edge", [])
+    start_pts = waypoints.get("start", [])
+    end_pts = waypoints.get("end", [])
 
     if not top_edge or not bottom_edge:
         return None
@@ -166,12 +168,14 @@ def build_plains_polygon(waypoints: dict) -> dict:
     top_edge = dedup(top_edge)
     bottom_edge = dedup(bottom_edge)
 
-    # Filter bottom_edge: remove points that are NORTH of the top edge.
-    # In Southern Hemisphere, "north" = less negative lat (closer to 0).
-    # The CSV has erroneous "bottom_edge" points that are actually start points
-    # on the north side, which cause self-intersection when sorted by lon.
-    northmost_top_lat = max(pt[0] for pt in top_edge)  # least negative = most north
-    bottom_edge = [pt for pt in bottom_edge if pt[0] < northmost_top_lat - 0.00005]
+    # Remove bottom_edge points that are duplicates of start/end points.
+    # The CSV sometimes has start points erroneously repeated as bottom_edge,
+    # which causes self-intersection (bowtie) when sorted by longitude.
+    start_end_set = set()
+    for pt in start_pts + end_pts:
+        start_end_set.add((round(pt[0], 5), round(pt[1], 5)))
+    bottom_edge = [pt for pt in bottom_edge
+                   if (round(pt[0], 5), round(pt[1], 5)) not in start_end_set]
 
     # Sort top edge west-to-east (ascending longitude)
     top_sorted = sorted(top_edge, key=lambda p: p[1])
@@ -242,7 +246,7 @@ def build_bushes_box_polygon() -> dict:
     return {
         "type": "Feature",
         "properties": {
-            "aoi_id": "san_lorenzo_bushes_box",
+            "aoi_id": "san_lorenzo_box_bushes",
             "site": "san_lorenzo",
             "zone": "bushes_box_count",
             "name": "Box Count High Density Bushes",
@@ -260,6 +264,50 @@ def build_bushes_box_polygon() -> dict:
             "type": "Polygon",
             "coordinates": [coords_proj]
         }
+    }
+
+
+def build_road_polygon() -> dict:
+    """Load the Road AOI polygon from the existing POSGAR GeoJSON.
+
+    The Road AOI was created from 34 GPS waypoints (convex hull, 11 vertices)
+    and already exists in EPSG:5345 at:
+    gps_aoi/data/layers/aoi_san_lorenzo_road_posgar.geojson
+    """
+    road_path = PROJECT_ROOT / "gps_aoi" / "data" / "layers" / "aoi_san_lorenzo_road_posgar.geojson"
+    if not road_path.exists():
+        print(f"  Warning: Road POSGAR GeoJSON not found: {road_path}")
+        return None
+
+    with open(road_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    features = data.get("features", [])
+    if not features:
+        return None
+
+    src_feature = features[0]
+    src_props = src_feature.get("properties", {})
+    geometry = src_feature.get("geometry", {})
+
+    return {
+        "type": "Feature",
+        "properties": {
+            "aoi_id": "san_lorenzo_road",
+            "site": "san_lorenzo",
+            "zone": "road",
+            "name": "The Road",
+            "penguin_count": src_props.get("penguin_count", 359),
+            "area_ha": src_props.get("area_ha", 1.08),
+            "density_per_ha": round(
+                src_props.get("penguin_count", 359)
+                / max(src_props.get("area_ha", 1.08), 0.0001),
+                2,
+            ),
+            "notes": "Convex hull of 34 GPS waypoints from field team.",
+            "source": "GPS waypoints (Nov 08, 2025)",
+        },
+        "geometry": geometry,
     }
 
 
@@ -353,6 +401,14 @@ def main() -> int:
         features.append(bushes_feature)
         print(f"  Bushes box: {len(bushes_feature['geometry']['coordinates'][0])} vertices, "
               f"{bushes_feature['properties']['area_ha']:.4f} ha")
+
+    # Build Road polygon (from existing POSGAR GeoJSON)
+    road_feature = build_road_polygon()
+    if road_feature:
+        features.append(road_feature)
+        coords = road_feature["geometry"]["coordinates"][0]
+        print(f"  Road: {len(coords)} vertices, "
+              f"{road_feature['properties']['area_ha']:.4f} ha")
 
     output = {
         "type": "FeatureCollection",

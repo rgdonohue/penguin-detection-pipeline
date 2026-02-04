@@ -7,7 +7,7 @@ Project: Penguin Detection Pipeline v4.0
 
 **LiDAR detection works well at open island sites.** At Caleta Tiny Island, the pipeline found 315 candidates against a field count of 321 — a 0.98 detection rate. Feature analysis suggests 85–95% of these candidates are real penguins. We are running a precision audit now to confirm that number.
 
-**LiDAR alone is insufficient at mainland burrow sites.** San Lorenzo detection rates are 0.19–0.29. This is primarily a physics problem: ~43% of penguins at cave sites are inside burrows with no above-ground signature, setting a theoretical detection ceiling of ~57%. Even with perfect precision, LiDAR-only F1 cannot exceed ~0.45 at these sites.
+**LiDAR alone is insufficient at mainland burrow sites.** San Lorenzo Caves and Plains detection rates are 0.19–0.29. This is primarily a physics problem: ~43% of penguins at cave sites are inside burrows with no above-ground signature, setting a theoretical detection ceiling of ~57%. The San Lorenzo Road site (open terrain) achieves 0.78 — better than the burrow sites, consistent with less occlusion.
 
 **We need confirmed AOI boundaries from the field team to finalize San Lorenzo counts.** Without them, we cannot determine whether the low detection rates are due to burrow occlusion, AOI mismatch, or both.
 
@@ -17,6 +17,7 @@ Project: Penguin Detection Pipeline v4.0
 |------|------|-----------|------------|---------------|-------------------|
 | Caleta Tiny Island | Open island | 321 | 315 | **0.98** | 85–95% (pending labeling) |
 | Caleta Small Island | Open island | 1,557 | 1,255 | **0.81** | Similar expected |
+| San Lorenzo Road | Open mainland | 359 | 281 | **0.78** | Unknown |
 | San Lorenzo Caves | Burrow-heavy | 908 | 263 | 0.29 | Unknown |
 | San Lorenzo Plains | Mixed terrain | 453 | 86 | 0.19 | Unknown |
 
@@ -47,7 +48,7 @@ We've been working from the GPS coordinates and annotated map screenshots in the
 
 1. **"Bushes" box count (55 penguins):** The four GPS coordinates on p.4 of the field notes (42.085273 S / 63.866958 W, etc.) produce a ~200 m² polygon that falls inside LiDAR tile 11.9, which covers the Plains area — not where we'd expect the Bushes count. The reported area is 3.8 ha (~190x larger). Are these coordinates for a different box count, or internal waypoints within a larger area?
 2. **Caves box count (32 penguins):** We don't have corner coordinates for this one. Is it a sub-area within the larger Caves survey zone?
-3. **San Lorenzo Road (359 penguins):** The field notes show the road transect but no boundary polygon. Was this a fixed-width transect along the road, or a defined area?
+3. **San Lorenzo Road (359 penguins):** We've digitized a polygon from the field notes (1.09 ha, 281 detections, 0.78 rate). Can you confirm the boundary matches the counted area?
 4. **Caleta box count sub-areas (~20 penguins each):** We have the Google Maps screenshots with polygons. Can you confirm which tiles these correspond to?
 
 We also noticed that LiDAR tiles `box_count_11.9` and `box_count_11.10` appear spatially swapped relative to the site zone names — 11.9 covers the Plains area and 11.10 covers Caves. Can you confirm which is which?

@@ -41,6 +41,7 @@ SAN_LORENZO_COLORS = {
     "san_lorenzo_caves": "#d46a5a",       # muted red
     "san_lorenzo_plains": "#5a8a7e",      # muted teal
     "san_lorenzo_box_bushes": "#c4a35a",  # muted gold
+    "san_lorenzo_road": "#8a5a9a",        # muted purple
 }
 CALETA_COLORS = {
     "caleta_small_island": "#5a7a9a",     # muted blue

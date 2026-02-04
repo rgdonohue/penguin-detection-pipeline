@@ -210,6 +210,7 @@ The `--top-method p95` online quantile estimator (rewritten at commit `76b01fc`)
 | Caleta Small Island | DJI L2 | 1,557 | 1,255 | 0.81 | 0.25 | 0.28–0.48 | 3–60 | DJI L2 (Caleta) | High — LiDAR-derived AOI |
 | San Lorenzo Caves | TrueView 515 | 908 | 263 | 0.29 | 0.30 | 0.28–0.48 | 3–50 | TrueView 515 (San Lorenzo) | Low — approximate AOI, burrow-dominated |
 | San Lorenzo Plains | TrueView 515 | 453 | 86 | 0.19 | 0.30 | 0.28–0.48 | 3–50 | TrueView 515 (San Lorenzo) | Low — approximate AOI, sparse density |
+| San Lorenzo Road | TrueView 515 | 359 | 281 | 0.78 | 0.30 | 0.28–0.48 | 3–50 | TrueView 515 (San Lorenzo) | Medium — digitized AOI, boundary unconfirmed |
 
 **Legacy benchmark (Punta Tombo):** Golden AOI produces exactly 776 detections with SHA256-verified signature, cell 0.25m, HAG 0.20–0.60m, area 2–80 cells, top-method max.
 

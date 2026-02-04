@@ -106,9 +106,9 @@ class TestSanLorenzoAois:
         data = json.loads(out_path.read_text())
         assert data["type"] == "FeatureCollection"
         assert data["crs"]["epsg"] == 5345
-        # Should have at least 3 features: caves, plains, bushes box
-        assert len(data["features"]) >= 3
+        # Should have at least 4 features: caves, plains, bushes box, road
+        assert len(data["features"]) >= 4
         aoi_ids = [f["properties"]["aoi_id"] for f in data["features"]]
         assert "san_lorenzo_caves" in aoi_ids
         assert "san_lorenzo_plains" in aoi_ids
-        assert "san_lorenzo_bushes_box" in aoi_ids
+        assert "san_lorenzo_box_bushes" in aoi_ids

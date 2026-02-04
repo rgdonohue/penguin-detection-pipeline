@@ -159,6 +159,7 @@ def build_plains_ring(typed_rows: list[tuple[float, float, str]], crs_epsg: int)
     """
     top_edge = [(lat, lon) for lat, lon, pt in typed_rows if pt == "top_edge"]
     bottom_edge = [(lat, lon) for lat, lon, pt in typed_rows if pt == "bottom_edge"]
+    start_end = [(lat, lon) for lat, lon, pt in typed_rows if pt in ("start", "end")]
     if not top_edge or not bottom_edge:
         return None
     # De-duplicate within ~1m (same lat/lon)
@@ -175,10 +176,10 @@ def build_plains_ring(typed_rows: list[tuple[float, float, str]], crs_epsg: int)
     bottom_edge = dedup(bottom_edge)
     if len(top_edge) < 2 or len(bottom_edge) < 2:
         return None
-    # Filter bottom_edge: remove points north of top edge (erroneous start points in CSV).
-    # In Southern Hemisphere, "north" = less negative lat.
-    northmost_top_lat = max(p[0] for p in top_edge)
-    bottom_edge = [p for p in bottom_edge if p[0] < northmost_top_lat - 0.00005]
+    # Remove bottom_edge points that are duplicates of start/end points.
+    # The CSV sometimes has start points erroneously repeated as bottom_edge.
+    start_end_keys = {(round(p[0], 5), round(p[1], 5)) for p in start_end}
+    bottom_edge = [p for p in bottom_edge if (round(p[0], 5), round(p[1], 5)) not in start_end_keys]
     if len(bottom_edge) < 2:
         return None
     # Sort top west-to-east (ascending lon), bottom east-to-west (descending lon)
