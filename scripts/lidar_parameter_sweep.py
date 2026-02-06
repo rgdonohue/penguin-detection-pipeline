@@ -96,7 +96,7 @@ def run_sweep(
             continue
         hag = build_hag_grid(las_path, dem, meta, chunk_size)
         t0 = time.time()
-        count, _, _ = detect_penguins_from_hag(
+        count, _, _, _ = detect_penguins_from_hag(
             hag, hag_min, baseline["hag_max"],
             baseline["min_area_cells"], baseline["max_area_cells"],
             cell_res=cell_res, mins=np.array(meta["mins"]),
@@ -122,7 +122,7 @@ def run_sweep(
             continue
         hag = build_hag_grid(las_path, dem, meta, chunk_size)
         t0 = time.time()
-        count, _, _ = detect_penguins_from_hag(
+        count, _, _, _ = detect_penguins_from_hag(
             hag, baseline["hag_min"], hag_max,
             baseline["min_area_cells"], baseline["max_area_cells"],
             cell_res=cell_res, mins=np.array(meta["mins"]),
@@ -148,7 +148,7 @@ def run_sweep(
         if min_area >= baseline["max_area_cells"]:
             continue
         t0 = time.time()
-        count, _, _ = detect_penguins_from_hag(
+        count, _, _, _ = detect_penguins_from_hag(
             hag, baseline["hag_min"], baseline["hag_max"],
             min_area, baseline["max_area_cells"],
             cell_res=cell_res, mins=np.array(meta["mins"]),
@@ -173,7 +173,7 @@ def run_sweep(
         if baseline["min_area_cells"] >= max_area:
             continue
         t0 = time.time()
-        count, _, _ = detect_penguins_from_hag(
+        count, _, _, _ = detect_penguins_from_hag(
             hag, baseline["hag_min"], baseline["hag_max"],
             baseline["min_area_cells"], max_area,
             cell_res=cell_res, mins=np.array(meta["mins"]),
@@ -198,7 +198,7 @@ def run_sweep(
         if hag_min >= hag_max:
             continue
         t0 = time.time()
-        count, _, _ = detect_penguins_from_hag(
+        count, _, _, _ = detect_penguins_from_hag(
             hag, hag_min, hag_max,
             baseline["min_area_cells"], baseline["max_area_cells"],
             cell_res=cell_res, mins=np.array(meta["mins"]),

@@ -5,6 +5,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+try:
+    import laspy
+except ImportError:
+    laspy = None  # type: ignore[assignment]
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -75,7 +80,7 @@ def test_empty_tile_ground_dem_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert hag.shape == (1, 1)
     assert float(hag[0, 0]) == pytest.approx(0.0)
 
-    count, labeled, dets = lidar.detect_penguins_from_hag(
+    count, labeled, dets, _ = lidar.detect_penguins_from_hag(
         hag,
         hag_min=0.2,
         hag_max=0.6,
@@ -165,7 +170,7 @@ def test_watershed_split_uses_unique_labels_across_regions():
     hag[4, 20] = 1.6
     hag[9, 25] = 1.6
 
-    count, labeled, dets = lidar.detect_penguins_from_hag(
+    count, labeled, dets, _ = lidar.detect_penguins_from_hag(
         hag,
         hag_min=0.5,
         hag_max=2.0,
@@ -261,7 +266,7 @@ class TestConfidenceScoring:
 def test_hag_grid_all_below_threshold_gives_zero_detections():
     """All HAG values below hag_min should produce zero detections."""
     hag = np.full((20, 20), 0.05, dtype=np.float32)  # well below 0.2
-    count, labeled, dets = lidar.detect_penguins_from_hag(
+    count, labeled, dets, _ = lidar.detect_penguins_from_hag(
         hag,
         hag_min=0.2,
         hag_max=0.6,
@@ -388,3 +393,146 @@ class TestCSFGroundModel:
     def test_csf_ground_method_choice_stored(self):
         """ground_method='csf' is a valid choice string."""
         assert "csf" in ["min", "p05", "csf"]
+
+
+# ---------------------------------------------------------------------------
+# Z-std enrichment grid tests
+# ---------------------------------------------------------------------------
+
+def _write_test_las(path, x_arr, y_arr, z_arr):
+    """Write a minimal LAS file with given coordinates."""
+    header = laspy.LasHeader(point_format=0, version="1.2")
+    las = laspy.LasData(header)
+    las.x = np.asarray(x_arr, dtype=np.float64)
+    las.y = np.asarray(y_arr, dtype=np.float64)
+    las.z = np.asarray(z_arr, dtype=np.float64)
+    las.write(str(path))
+
+
+@pytest.mark.skipif(not lidar.LASPY_AVAILABLE, reason="laspy not installed")
+class TestZStdEnrichment:
+    def test_z_std_grid_correct_values(self, tmp_path):
+        """Z-std grid should compute per-cell standard deviation of Z values."""
+        # Cell (0,0) gets z=[1, 2, 3] → std = sqrt(2/3) ≈ 0.8165
+        # Cell (0,1) gets z=[5, 5, 5] → std = 0.0
+        las_path = tmp_path / "test.las"
+        _write_test_las(
+            las_path,
+            [0.1, 0.1, 0.1, 0.3, 0.3, 0.3],
+            [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+            [1.0, 2.0, 3.0, 5.0, 5.0, 5.0],
+        )
+        grids = lidar._build_enrichment_grids(
+            las_path,
+            chunk_size=10,
+            mins=np.array([0.0, 0.0, 0.0]),
+            cell_res=0.25,
+            ny=1, nx=2,
+            include_intensity=False,
+            include_rgb=False,
+            include_returns=False,
+            include_z_std=True,
+        )
+        z_std = grids["z_std"]
+        assert z_std is not None
+        assert z_std.shape == (1, 2)
+        # Cell (0,0): z=[1,2,3], std=sqrt(2/3) ≈ 0.8165
+        assert z_std[0, 0] == pytest.approx(np.std([1.0, 2.0, 3.0]), abs=1e-4)
+        # Cell (0,1): z=[5,5,5], std=0
+        assert z_std[0, 1] == pytest.approx(0.0, abs=1e-4)
+
+    def test_z_std_grid_none_when_disabled(self, tmp_path):
+        """Z-std grid should be None when include_z_std=False."""
+        las_path = tmp_path / "test.las"
+        _write_test_las(las_path, [0.1], [0.1], [1.0])
+        grids = lidar._build_enrichment_grids(
+            las_path,
+            chunk_size=10,
+            mins=np.array([0.0, 0.0, 0.0]),
+            cell_res=0.25,
+            ny=1, nx=1,
+            include_intensity=False,
+            include_rgb=False,
+            include_returns=False,
+            include_z_std=False,
+        )
+        assert grids["z_std"] is None
+
+
+# ---------------------------------------------------------------------------
+# Exact p95 HAG grid tests
+# ---------------------------------------------------------------------------
+
+class TestExactP95:
+    def test_exact_p95_matches_numpy(self, monkeypatch, tmp_path):
+        """Exact p95 should match np.percentile for known distributions."""
+        # Cell (0,0) gets z = [0.0, 0.1, 0.2, ..., 1.9] (20 points)
+        # DEM = 0.0, so HAG = z.  p95 of [0..1.9] via numpy:
+        z_vals = np.arange(0.0, 2.0, 0.1)
+        expected_p95 = float(np.percentile(z_vals, 95))
+
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(0.25, 0.25, 0.0),
+            chunks=(
+                ([0.1] * 20, [0.1] * 20, z_vals.tolist()),
+            ),
+        )
+        dem = np.zeros((1, 1), dtype=np.float32)
+        meta = {"mins": [0.0, 0.0, 0.0], "cell_res": 0.25, "shape": [1, 1]}
+
+        hag = lidar.build_hag_grid_exact_percentile(
+            tmp_path / "test.las", dem, meta, chunk_size=100, percentile=95.0,
+        )
+        assert hag.shape == (1, 1)
+        assert float(hag[0, 0]) == pytest.approx(expected_p95, abs=0.01)
+
+    def test_exact_p95_within_tolerance_of_histogram(self, monkeypatch, tmp_path):
+        """Exact p95 should agree with histogram p95 within 10mm."""
+        rng = np.random.default_rng(42)
+        n_pts = 200
+        z_vals = rng.uniform(0.0, 1.5, n_pts)
+        x_vals = [0.1] * n_pts
+        y_vals = [0.1] * n_pts
+
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(0.25, 0.25, 0.0),
+            chunks=((x_vals, y_vals, z_vals.tolist()),),
+        )
+        dem = np.zeros((1, 1), dtype=np.float32)
+        meta = {"mins": [0.0, 0.0, 0.0], "cell_res": 0.25, "shape": [1, 1]}
+
+        hag_exact = lidar.build_hag_grid_exact_percentile(
+            tmp_path / "test.las", dem, meta, chunk_size=100, percentile=95.0,
+        )
+
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(0.25, 0.25, 0.0),
+            chunks=((x_vals, y_vals, z_vals.tolist()),),
+        )
+        hag_hist = lidar.build_hag_grid_histogram_percentile(
+            tmp_path / "test.las", dem, meta, chunk_size=100, percentile=95.0,
+        )
+
+        assert abs(float(hag_exact[0, 0]) - float(hag_hist[0, 0])) < 0.01  # 10mm
+
+    def test_exact_p95_empty_cell(self, monkeypatch, tmp_path):
+        """Empty cells should have HAG = 0."""
+        _patch_lidar_stream(
+            monkeypatch,
+            mins=(0.0, 0.0, 0.0),
+            maxs=(0.0, 0.0, 0.0),
+            chunks=(),
+        )
+        dem = np.zeros((1, 1), dtype=np.float32)
+        meta = {"mins": [0.0, 0.0, 0.0], "cell_res": 0.25, "shape": [1, 1]}
+
+        hag = lidar.build_hag_grid_exact_percentile(
+            tmp_path / "test.las", dem, meta, chunk_size=100,
+        )
+        assert float(hag[0, 0]) == 0.0

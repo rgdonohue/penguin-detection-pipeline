@@ -48,7 +48,9 @@ from scipy.ndimage import percentile_filter
 from scipy.spatial import cKDTree
 from pipelines.utils.provenance import write_provenance, append_timings
 from pipelines.contracts import LIDAR_CANDIDATES_CONTRACT, LIDAR_CANDIDATES_PURPOSE
-from pipelines.lidar_profiles import as_policy_dict
+from pipelines.lidar_profiles import as_policy_dict, SENSOR_PROFILES
+from pipelines.blob_features import extract_blob_features, BlobFeatures
+import hashlib
 
 # LAS streaming
 try:
@@ -218,6 +220,7 @@ def _build_enrichment_grids(
     include_intensity: bool = True,
     include_rgb: bool = True,
     include_returns: bool = True,
+    include_z_std: bool = False,
     verbose: bool = False,
 ) -> Dict[str, Optional[np.ndarray]]:
     """Build per-cell grids for intensity, RGB, and return count in one streaming pass.
@@ -244,6 +247,9 @@ def _build_enrichment_grids(
     if include_returns:
         single_cnt = np.zeros(n_cells, dtype=np.int32)
         returns_available = None
+    if include_z_std:
+        z_sum = np.zeros(n_cells, dtype=np.float64)
+        z_sq_sum = np.zeros(n_cells, dtype=np.float64)
 
     with laspy.open(str(las_path)) as fh:
         for pts in fh.chunk_iterator(chunk_size):
@@ -258,6 +264,12 @@ def _build_enrichment_grids(
                 continue
             flat = (iy[valid] * nx + ix[valid])
             np.add.at(cnt, flat, 1)
+
+            if include_z_std:
+                z = np.asarray(pts.z, dtype=np.float64)
+                z_valid = z[valid]
+                np.add.at(z_sum, flat, z_valid)
+                np.add.at(z_sq_sum, flat, z_valid * z_valid)
 
             if include_intensity:
                 i_arr = _read_extra_fields(pts, "intensity")
@@ -322,6 +334,16 @@ def _build_enrichment_grids(
             )
     else:
         result["single_return_fraction"] = None
+
+    if include_z_std:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            cnt_safe = np.maximum(cnt_2d, 1).astype(np.float64)
+            mean_z = z_sum.reshape(ny, nx) / cnt_safe
+            mean_z_sq = z_sq_sum.reshape(ny, nx) / cnt_safe
+            variance = np.maximum(mean_z_sq - mean_z * mean_z, 0.0)
+            result["z_std"] = np.where(has_data, np.sqrt(variance).astype(np.float32), np.float32(0))
+    else:
+        result["z_std"] = None
 
     if verbose:
         for key, grid in result.items():
@@ -641,6 +663,75 @@ def _write_geojson(
         return str(e)
 
 
+def _write_geotiff(
+    raster: np.ndarray,
+    out_path: Path,
+    mins: np.ndarray,
+    cell_res: float,
+    crs_meta: Optional[Dict[str, object]],
+    nodata: Optional[float] = None,
+) -> Optional[str]:
+    """Write a raster array as a GeoTIFF.
+
+    Args:
+        raster: 2D numpy array (ny, nx) to write
+        out_path: Output file path
+        mins: XY origin (lower-left corner) as [min_x, min_y, ...]
+        cell_res: Cell resolution in meters
+        crs_meta: CRS metadata dict with 'epsg' or 'wkt' key
+        nodata: Optional nodata value
+
+    Returns:
+        None on success, error message string on failure.
+        Returns a message (not error) if rasterio is unavailable.
+    """
+    try:
+        import rasterio
+        from rasterio.transform import from_origin
+    except ImportError:
+        return "rasterio not available; skipping GeoTIFF output"
+
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Rasterio expects transform from upper-left, but our grid origin is lower-left
+        # Need to flip vertically and compute upper-left origin
+        ny, nx = raster.shape
+        # Upper-left Y = lower-left Y + height
+        upper_left_y = float(mins[1]) + (ny * cell_res)
+        transform = from_origin(float(mins[0]), upper_left_y, cell_res, cell_res)
+
+        # Determine CRS string for rasterio
+        crs = None
+        if crs_meta is not None:
+            if "epsg" in crs_meta and crs_meta["epsg"] is not None:
+                crs = f"EPSG:{int(crs_meta['epsg'])}"
+            elif "wkt" in crs_meta and crs_meta["wkt"]:
+                crs = str(crs_meta["wkt"])
+
+        # Flip raster vertically (origin lower-left -> upper-left for GeoTIFF)
+        raster_flipped = np.flipud(raster)
+
+        with rasterio.open(
+            out_path,
+            "w",
+            driver="GTiff",
+            height=ny,
+            width=nx,
+            count=1,
+            dtype=raster.dtype,
+            crs=crs,
+            transform=transform,
+            nodata=nodata,
+            compress="lzw",
+        ) as dst:
+            dst.write(raster_flipped, 1)
+
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def _build_ground_csf(
     las_path: Path,
     cell_res: float,
@@ -824,16 +915,19 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
 
     For each point the HAG is ``z - DEM[cell]``; the per-cell aggregate is either
     the maximum (``top_method='max'``) or an online 95th percentile estimate
-    (``top_method='p95'``).  An optional Z-score cap suppresses outlier spikes.
+    (``top_method='p95-online'``).  An optional Z-score cap suppresses outlier spikes.
     The returned array is clipped to non-negative values.
+
+    Note: For exact p95 percentile, use ``build_hag_grid_exact_percentile()`` instead.
+    The online p95 estimator has convergence issues with chunked streaming.
     """
     mins = np.array(meta["mins"], dtype=float)
     cell_res = float(meta["cell_res"])
     ny, nx = dem.shape
-    use_p95 = (str(top_method).lower() == "p95")
+    use_p95_online = (str(top_method).lower() == "p95-online")
     hag = np.zeros_like(dem, dtype=np.float32)
     # Approximate per-cell p95 using online quantile tracking
-    q95 = np.full_like(dem, np.nan, dtype=np.float32) if use_p95 else None
+    q95 = np.full_like(dem, np.nan, dtype=np.float32) if use_p95_online else None
     for x, y, z in _stream_points(las_path, chunk_size):
         ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
         if not np.any(mask):
@@ -844,16 +938,16 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
         hag_chunk = (z_valid - ground).astype(np.float32)
         flat = (iy * nx + ix)
         if flat.size:
-            if use_p95:
+            if use_p95_online:
                 q95_flat = q95.ravel()  # type: ignore[arg-type]
                 _online_quantile_update_indexed(q95_flat, flat, hag_chunk, p=0.95, lr=top_quantile_lr)
             else:
                 hag_flat = hag.ravel()
                 np.maximum.at(hag_flat, flat, hag_chunk)
     # Finalize HAG surface
-    if use_p95 and q95 is not None:
+    if use_p95_online and q95 is not None:
         hag = np.where(np.isnan(q95), hag, q95)
-    if top_zscore_cap is not None and not use_p95:
+    if top_zscore_cap is not None and not use_p95_online:
         finite = np.isfinite(hag)
         if finite.any():
             mean = float(np.nanmean(hag[finite]))
@@ -863,6 +957,305 @@ def build_hag_grid(las_path: Path, dem: np.ndarray, meta: Dict, chunk_size: int,
                 hag = np.clip(hag, 0, cap, out=hag)
     # Ensure non-negative
     return np.clip(hag, 0, None)
+
+
+def build_hag_grid_histogram_percentile(
+    las_path: Path,
+    dem: np.ndarray,
+    meta: Dict,
+    chunk_size: int,
+    percentile: float = 95.0,
+    hag_bin_min: float = -0.5,
+    hag_bin_max: float = 3.0,
+    n_bins: int = 350,
+) -> np.ndarray:
+    """Compute per-cell HAG percentile using histogram-based estimation.
+
+    Memory-efficient O(n_cells * n_bins) approach suitable for production use.
+    Builds a histogram of HAG values per cell, then computes approximate
+    percentile from the histogram.
+
+    Args:
+        las_path: Path to LAS/LAZ file
+        dem: Ground DEM array (ny, nx)
+        meta: Grid metadata with mins, cell_res, shape
+        chunk_size: LAS streaming chunk size
+        percentile: Target percentile (default 95)
+        hag_bin_min: Minimum HAG value for histogram bins
+        hag_bin_max: Maximum HAG value for histogram bins
+        n_bins: Number of histogram bins
+
+    Returns:
+        HAG percentile array (ny, nx)
+    """
+    mins = np.array(meta["mins"], dtype=float)
+    cell_res = float(meta["cell_res"])
+    ny, nx = dem.shape
+    n_cells = ny * nx
+
+    # Histogram bins
+    bin_edges = np.linspace(hag_bin_min, hag_bin_max, n_bins + 1)
+    bin_width = bin_edges[1] - bin_edges[0]
+
+    # Per-cell histogram counts: shape (n_cells, n_bins)
+    # Use uint16 to save memory (max 65535 points per bin per cell)
+    histograms = np.zeros((n_cells, n_bins), dtype=np.uint16)
+
+    # Stream points and build histograms
+    for x, y, z in _stream_points(las_path, chunk_size):
+        ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+        if not np.any(mask):
+            continue
+        z_valid = z[mask]
+        ground = dem[iy, ix]
+        hag_vals = (z_valid - ground).astype(np.float32)
+        flat = (iy * nx + ix)
+
+        # Bin the HAG values
+        bin_indices = np.clip(
+            ((hag_vals - hag_bin_min) / bin_width).astype(np.int32),
+            0, n_bins - 1
+        )
+
+        # Increment histogram counts
+        np.add.at(histograms, (flat, bin_indices), 1)
+
+    # Compute percentile from histograms
+    hag = np.zeros((ny, nx), dtype=np.float32)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    for i in range(n_cells):
+        hist = histograms[i]
+        total = hist.sum()
+        if total == 0:
+            continue
+
+        row = i // nx
+        col = i % nx
+
+        # Find percentile from cumulative histogram
+        target_count = total * (percentile / 100.0)
+        cumsum = np.cumsum(hist)
+        bin_idx = np.searchsorted(cumsum, target_count)
+        bin_idx = min(bin_idx, n_bins - 1)
+
+        # Linear interpolation within bin for better accuracy
+        if bin_idx > 0:
+            prev_cum = cumsum[bin_idx - 1]
+            curr_cum = cumsum[bin_idx]
+            if curr_cum > prev_cum:
+                frac = (target_count - prev_cum) / (curr_cum - prev_cum)
+                hag[row, col] = bin_edges[bin_idx] + frac * bin_width
+            else:
+                hag[row, col] = bin_centers[bin_idx]
+        else:
+            hag[row, col] = bin_centers[bin_idx]
+
+    return np.clip(hag, 0, None)
+
+
+def build_hag_grid_exact_percentile(
+    las_path: Path,
+    dem: np.ndarray,
+    meta: Dict,
+    chunk_size: int,
+    percentile: float = 95.0,
+    max_memory_gb: float = 4.0,
+) -> np.ndarray:
+    """Compute per-cell HAG percentile using a two-pass exact approach.
+
+    Pass 1: Stream all points, compute HAG, count per cell.
+    Allocate a flat float32 array large enough to hold all HAG values.
+    Pass 2: Stream again, insert HAG values into the flat array at per-cell offsets.
+    Post-pass: For each occupied cell, compute np.percentile on its slice.
+
+    Falls back to histogram-based p95 if memory exceeds *max_memory_gb*.
+
+    Args:
+        las_path: Path to LAS/LAZ file
+        dem: Ground DEM array (ny, nx)
+        meta: Grid metadata with mins, cell_res, shape
+        chunk_size: LAS streaming chunk size
+        percentile: Target percentile (default 95)
+        max_memory_gb: Maximum memory for the value array (default 4 GB)
+
+    Returns:
+        HAG percentile array (ny, nx)
+    """
+    mins = np.array(meta["mins"], dtype=float)
+    cell_res = float(meta["cell_res"])
+    ny, nx = dem.shape
+    n_cells = ny * nx
+
+    # Pass 1: count points per cell
+    counts = np.zeros(n_cells, dtype=np.int64)
+    for x, y, z in _stream_points(las_path, chunk_size):
+        ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+        if not np.any(mask):
+            continue
+        flat = (iy * nx + ix)
+        if flat.size:
+            np.add.at(counts, flat, 1)
+
+    total_points = int(counts.sum())
+    mem_bytes = total_points * 4  # float32
+    mem_gb = mem_bytes / (1024 ** 3)
+    if mem_gb > max_memory_gb:
+        print(
+            f"WARNING: p95-exact would need {mem_gb:.1f} GB (>{max_memory_gb:.1f} GB limit); "
+            f"falling back to histogram p95.",
+            file=sys.stderr,
+        )
+        return build_hag_grid_histogram_percentile(
+            las_path, dem, meta, chunk_size, percentile=percentile,
+        )
+
+    # Build cumulative offset array
+    offsets = np.zeros(n_cells + 1, dtype=np.int64)
+    np.cumsum(counts, out=offsets[1:])
+
+    # Allocate flat storage
+    values = np.empty(total_points, dtype=np.float32)
+    cursors = offsets[:-1].copy()  # per-cell fill position
+
+    # Pass 2: insert HAG values
+    for x, y, z in _stream_points(las_path, chunk_size):
+        ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+        if not np.any(mask):
+            continue
+        z_valid = z[mask]
+        ground = dem[iy, ix]
+        hag_chunk = (z_valid - ground).astype(np.float32)
+        flat = (iy * nx + ix)
+        # Insert values at cursor positions (sequential within chunk to avoid races)
+        for i in range(flat.size):
+            cell = flat[i]
+            pos = cursors[cell]
+            values[pos] = hag_chunk[i]
+            cursors[cell] = pos + 1
+
+    # Compute percentile per cell
+    hag = np.zeros((ny, nx), dtype=np.float32)
+    for cell_idx in range(n_cells):
+        start = offsets[cell_idx]
+        end = offsets[cell_idx + 1]
+        if end <= start:
+            continue
+        row = cell_idx // nx
+        col = cell_idx % nx
+        cell_values = values[start:end]
+        hag[row, col] = np.percentile(cell_values, percentile)
+
+    return np.clip(hag, 0, None)
+
+
+def build_hag_multi_surface(
+    las_path: Path,
+    dem: np.ndarray,
+    meta: Dict,
+    chunk_size: int,
+) -> Dict[str, np.ndarray]:
+    """Compute multiple HAG surface statistics in a single streaming pass.
+
+    Memory-efficient approach using running statistics (Welford's algorithm)
+    for mean/std, plus tracking max and histogram for percentiles.
+
+    Args:
+        las_path: Path to LAS/LAZ file
+        dem: Ground DEM array (ny, nx)
+        meta: Grid metadata with mins, cell_res, shape
+        chunk_size: LAS streaming chunk size
+
+    Returns:
+        Dict with keys: 'max', 'mean', 'std', 'p50', 'p90', 'p95'
+    """
+    mins = np.array(meta["mins"], dtype=float)
+    cell_res = float(meta["cell_res"])
+    ny, nx = dem.shape
+    n_cells = ny * nx
+
+    # Running statistics arrays
+    hag_max = np.full((ny, nx), -np.inf, dtype=np.float32)
+    count = np.zeros((ny, nx), dtype=np.int32)
+    mean = np.zeros((ny, nx), dtype=np.float64)
+    m2 = np.zeros((ny, nx), dtype=np.float64)  # For Welford's algorithm
+
+    # Histogram for percentiles
+    hag_bin_min, hag_bin_max, n_bins = -0.5, 3.0, 350
+    bin_edges = np.linspace(hag_bin_min, hag_bin_max, n_bins + 1)
+    bin_width = bin_edges[1] - bin_edges[0]
+    histograms = np.zeros((n_cells, n_bins), dtype=np.uint16)
+
+    # Stream points
+    for x, y, z in _stream_points(las_path, chunk_size):
+        ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+        if not np.any(mask):
+            continue
+        z_valid = z[mask]
+        ground = dem[iy, ix]
+        hag_vals = (z_valid - ground).astype(np.float32)
+        flat = (iy * nx + ix)
+
+        # Update max
+        np.maximum.at(hag_max.ravel(), flat, hag_vals)
+
+        # Update running mean/variance (Welford's algorithm, vectorized)
+        for cell_idx, hag_val in zip(flat, hag_vals):
+            row, col = cell_idx // nx, cell_idx % nx
+            count[row, col] += 1
+            delta = hag_val - mean[row, col]
+            mean[row, col] += delta / count[row, col]
+            delta2 = hag_val - mean[row, col]
+            m2[row, col] += delta * delta2
+
+        # Update histogram
+        bin_indices = np.clip(
+            ((hag_vals - hag_bin_min) / bin_width).astype(np.int32),
+            0, n_bins - 1
+        )
+        np.add.at(histograms, (flat, bin_indices), 1)
+
+    # Finalize std
+    with np.errstate(divide='ignore', invalid='ignore'):
+        variance = np.where(count > 1, m2 / (count - 1), 0.0)
+    hag_std = np.sqrt(variance).astype(np.float32)
+
+    # Replace -inf with NaN for cells with no data
+    hag_max = np.where(np.isinf(hag_max), np.nan, hag_max)
+
+    # Compute percentiles from histograms
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    def percentile_from_hist(pct):
+        result = np.full((ny, nx), np.nan, dtype=np.float32)
+        for i in range(n_cells):
+            hist = histograms[i]
+            total = hist.sum()
+            if total == 0:
+                continue
+            row, col = i // nx, i % nx
+            target = total * (pct / 100.0)
+            cumsum = np.cumsum(hist)
+            bin_idx = min(np.searchsorted(cumsum, target), n_bins - 1)
+            if bin_idx > 0 and cumsum[bin_idx] > cumsum[bin_idx - 1]:
+                frac = (target - cumsum[bin_idx - 1]) / (cumsum[bin_idx] - cumsum[bin_idx - 1])
+                result[row, col] = bin_edges[bin_idx] + frac * bin_width
+            else:
+                result[row, col] = bin_centers[bin_idx]
+        return np.fmax(result, 0)  # Clip negative values to 0, preserving NaN
+
+    # Set empty cells to NaN for mean (where count==0)
+    mean_final = np.where(count > 0, mean, np.nan).astype(np.float32)
+    std_final = np.where(count > 0, hag_std, np.nan).astype(np.float32)
+
+    return {
+        'max': np.fmax(hag_max, 0).astype(np.float32),  # Clip negatives, preserve NaN
+        'mean': np.fmax(mean_final, 0).astype(np.float32),
+        'std': std_final,
+        'p50': percentile_from_hist(50),
+        'p90': percentile_from_hist(90),
+        'p95': percentile_from_hist(95),
+    }
 
 
 def detect_penguins_from_hag(hag: np.ndarray,
@@ -884,14 +1277,21 @@ def detect_penguins_from_hag(hag: np.ndarray,
                              apply_watershed: bool = False,
                              h_maxima_h: float = 0.05,
                              min_split_area_cells: int = 12,
-                             border_trim_px: int = 0) -> Tuple[int, np.ndarray, List[Dict]]:
+                             border_trim_px: int = 0,
+                             expected_penguin_area_cells: Optional[int] = None,
+                             watershed_merge_threshold: float = 1.5,
+                             emit_diagnostics: bool = False) -> Tuple[int, np.ndarray, List[Dict], Dict]:
     """Detect penguin-sized blobs from a HAG grid via threshold, morphology, and labeling.
 
-    Returns ``(count, labeled_image, detections_list)``.  Each detection dict
+    Returns ``(count, labeled_image, detections_list, watershed_stats)``.  Each detection dict
     contains centroid coordinates (row/col and optionally projected x/y), area,
     shape metrics (circularity, solidity), and HAG statistics.  Optional
     watershed splitting subdivides large blobs that likely contain multiple
     individuals.
+
+    The selective watershed trigger only attempts to split blobs that are
+    "likely merged" (area > expected_penguin_area_cells * watershed_merge_threshold).
+    If expected_penguin_area_cells is not provided, it defaults to min_split_area_cells.
     """
     # Optional smoothing
     img = hag.copy()
@@ -918,15 +1318,41 @@ def detect_penguins_from_hag(hag: np.ndarray,
     # Label connected components
     labeled = measure.label(mask, connectivity=connectivity)
 
-    # Optional watershed split on large blobs only
+    # Optional watershed split on large blobs only (selective trigger)
+    # Track split statistics for diagnostics
+    _watershed_stats = {
+        "n_candidates": 0,  # Blobs considered for splitting
+        "n_splits": 0,      # Blobs actually split
+        "n_new_regions": 0, # Total new regions created
+        "split_labels": set(),  # Labels that came from watershed splitting
+    }
+    if emit_diagnostics:
+        _watershed_stats["diagnostics"] = []
+
     if apply_watershed and min_split_area_cells > 0 and h_maxima_h > 0:
         current_max = int(labeled.max())
         if current_max > 0:
             new_labeled = labeled.copy()
+
+            # Determine expected penguin area for "likely merged" threshold
+            _expected_area = expected_penguin_area_cells if expected_penguin_area_cells else min_split_area_cells
+            _merge_threshold = _expected_area * watershed_merge_threshold
+
             # Iterate over regions to split selectively
             for region in measure.regionprops(labeled):
+                # Only consider blobs meeting minimum area requirement
                 if region.area < min_split_area_cells:
                     continue
+
+                # Selective trigger: only attempt split on "likely merged" blobs
+                # A blob is "likely merged" if its area exceeds the expected single-penguin area
+                # by a threshold factor (default 1.5x)
+                likely_merged_score = region.area / max(_expected_area, 1)
+                if region.area < _merge_threshold:
+                    continue
+
+                _watershed_stats["n_candidates"] += 1
+
                 minr, minc, maxr, maxc = region.bbox
                 submask = labeled[minr:maxr, minc:maxc] == region.label
                 # Markers via h-maxima on HAG within region
@@ -936,6 +1362,14 @@ def detect_penguins_from_hag(hag: np.ndarray,
                 markers, _ = ndi.label(maxima)
                 # Need at least 2 markers to split
                 if markers.max() < 2:
+                    if emit_diagnostics:
+                        _watershed_stats["diagnostics"].append({
+                            "original_label": int(region.label),
+                            "area_cells": int(region.area),
+                            "n_markers": int(markers.max()),
+                            "n_new_regions": 0,
+                            "action": "kept",
+                        })
                     continue
                 ws = watershed(-sub_hag, markers=markers, mask=submask, connectivity=connectivity)
                 # Relabel watershed result with global indices
@@ -946,8 +1380,9 @@ def detect_penguins_from_hag(hag: np.ndarray,
                 # Note: label ids must be unique across *all* regions, even if they are disjoint;
                 # otherwise scikit-image treats same-id pixels as one region (even when disconnected).
                 unique_ws = np.unique(ws[ws_mask])
+                n_new = len(unique_ws)
                 label_map = {int(l): int(i + current_max + 1) for i, l in enumerate(unique_ws)}
-                current_max += len(unique_ws)
+                current_max += n_new
                 patch = new_labeled[minr:maxr, minc:maxc]
                 # Clear the original region
                 patch[submask] = 0
@@ -956,6 +1391,22 @@ def detect_penguins_from_hag(hag: np.ndarray,
                 for l, gid in label_map.items():
                     mapped[ws == l] = gid
                 patch[ws_mask] = mapped[ws_mask]
+
+                # Track statistics
+                _watershed_stats["n_splits"] += 1
+                _watershed_stats["n_new_regions"] += n_new
+                # Track which labels came from splitting
+                _watershed_stats["split_labels"].update(label_map.values())
+
+                if emit_diagnostics:
+                    _watershed_stats["diagnostics"].append({
+                        "original_label": int(region.label),
+                        "area_cells": int(region.area),
+                        "n_markers": int(markers.max()),
+                        "n_new_regions": n_new,
+                        "action": "split",
+                    })
+
             labeled = new_labeled
     count = 0
     dets: List[Dict] = []
@@ -1010,7 +1461,7 @@ def detect_penguins_from_hag(hag: np.ndarray,
         labeled = np.where(keep[labeled], labeled, 0)
     else:
         labeled = np.zeros_like(labeled)
-    return count, labeled, dets
+    return count, labeled, dets, _watershed_stats
 
 
 def save_plot(hag: np.ndarray, labeled: np.ndarray, out_png: Path, title: str,
@@ -1108,6 +1559,72 @@ def save_hag_only(hag: np.ndarray, out_png: Path, title: str,
     plt.close(fig)
 
 
+def _apply_classifier(
+    classifier: Dict,
+    blob_features: List[BlobFeatures],
+    detections: List[Dict],
+    top_n: int = 3,
+) -> None:
+    """Apply trained classifier to blob features, updating detections in-place.
+
+    Args:
+        classifier: Loaded classifier dict (from train_blob_classifier.py)
+        blob_features: List of BlobFeatures for this tile
+        detections: List of detection dicts to update with probability/top_features
+        top_n: Number of top contributing features to report
+    """
+    if not blob_features or not detections:
+        return
+
+    model = classifier.get("model")
+    scaler = classifier.get("scaler")
+    feature_names = classifier.get("feature_names", [])
+
+    if model is None or scaler is None or not feature_names:
+        return
+
+    # Build feature matrix from blob features
+    # Map detection_id to detection dict for fast lookup
+    det_by_id = {d["id"]: d for d in detections if "id" in d}
+
+    for feat in blob_features:
+        if feat.detection_id not in det_by_id:
+            continue
+
+        # Extract feature values in the expected order
+        feature_values = []
+        for fname in feature_names:
+            val = getattr(feat, fname, None)
+            if val is None:
+                val = 0.0
+            feature_values.append(float(val))
+
+        X = np.array([feature_values])
+        try:
+            X_scaled = scaler.transform(X)
+            prob = float(model.predict_proba(X_scaled)[0, 1])
+
+            # Compute feature contributions for explanation
+            contributions = X_scaled[0] * model.coef_[0]
+            top_indices = np.argsort(np.abs(contributions))[::-1][:top_n]
+            top_feature_names = [feature_names[j] for j in top_indices]
+            top_feature_values = [round(contributions[j], 3) for j in top_indices]
+
+            explanation = "; ".join([
+                f"{name}={val:+.2f}"
+                for name, val in zip(top_feature_names, top_feature_values)
+            ])
+
+            # Update detection
+            det = det_by_id[feat.detection_id]
+            det["probability"] = round(prob, 4)
+            det["top_features"] = explanation
+
+        except Exception:
+            # Skip this detection if inference fails
+            continue
+
+
 def process_file(las_path: Path,
                  cell_res: float,
                  hag_min: float,
@@ -1133,6 +1650,8 @@ def process_file(las_path: Path,
                  apply_watershed: bool = False,
                  h_maxima_h: float = 0.05,
                  min_split_area_cells: int = 12,
+                 watershed_merge_threshold: float = 1.5,
+                 emit_watershed_diagnostics: bool = False,
                  connectivity: int = 2,
                  emit_geojson_path: Optional[Path] = None,
                  geojson_crs: Optional[Dict[str, object]] = None,
@@ -1147,7 +1666,13 @@ def process_file(las_path: Path,
                  density_stats: bool = False,
                  csf_cloth_resolution: float = 0.5,
                  csf_class_threshold: float = 0.3,
-                 csf_max_points: int = 20_000_000) -> Dict:
+                 csf_max_points: int = 20_000_000,
+                 emit_dtm_dir: Optional[Path] = None,
+                 dtm_crs: Optional[Dict[str, object]] = None,
+                 emit_hag_surfaces_dir: Optional[Path] = None,
+                 emit_blob_features: bool = False,
+                 classifier_model: Optional[Dict] = None,
+                 emit_dtm_quality: bool = False) -> Dict:
     """Process a single LAS/LAZ tile: build DEM, compute HAG, detect candidates.
 
     Orchestrates the full per-tile pipeline (ground DEM → HAG grid → detection →
@@ -1187,7 +1712,7 @@ def process_file(las_path: Path,
                 }
             raise RuntimeError(f"{las_path.name}: {msg}")
     _count_grid: Optional[np.ndarray] = None
-    if density_stats:
+    if density_stats or emit_dtm_quality:
         _count_grid = np.zeros((ny, nx), dtype=np.int32)
     _csf_meta: Optional[Dict] = None
     _actual_ground_method = ground_method
@@ -1224,15 +1749,91 @@ def process_file(las_path: Path,
             bounds=(mins, maxs),
             count_grid=_count_grid,
         )
-    hag = build_hag_grid(
-        las_path,
-        dem,
-        meta,
-        chunk_size,
-        top_method=top_method,
-        top_zscore_cap=top_zscore_cap,
-        top_quantile_lr=top_quantile_lr,
-    )
+    # Build HAG surface for detection
+    # IMPORTANT: Output flags (emit_hag_surfaces) must NOT affect detection results
+    if top_method.lower() == "p95":
+        # Use histogram-based percentile (memory-efficient)
+        hag = build_hag_grid_histogram_percentile(
+            las_path,
+            dem,
+            meta,
+            chunk_size,
+            percentile=95.0,
+        )
+    elif top_method.lower() == "p95-exact":
+        # Use two-pass exact percentile
+        hag = build_hag_grid_exact_percentile(
+            las_path,
+            dem,
+            meta,
+            chunk_size,
+            percentile=95.0,
+        )
+    else:
+        # Use streaming method (max or p95-online)
+        hag = build_hag_grid(
+            las_path,
+            dem,
+            meta,
+            chunk_size,
+            top_method=top_method,
+            top_zscore_cap=top_zscore_cap,
+            top_quantile_lr=top_quantile_lr,
+        )
+
+    # Optional multi-surface HAG output (computed separately, doesn't affect detection)
+    _hag_surfaces: Optional[Dict[str, np.ndarray]] = None
+    if emit_hag_surfaces_dir is not None:
+        # Build all surfaces in a single streaming pass
+        _hag_surfaces = build_hag_multi_surface(
+            las_path,
+            dem,
+            meta,
+            chunk_size,
+        )
+
+    # Optional DTM raster output
+    if emit_dtm_dir is not None:
+        dtm_path = emit_dtm_dir / f"{las_path.stem}_dtm.tif"
+        dtm_err = _write_geotiff(
+            dem,
+            dtm_path,
+            np.array(meta["mins"]),
+            cell_res,
+            dtm_crs,
+            nodata=np.nan,
+        )
+        if dtm_err:
+            if "rasterio not available" in dtm_err:
+                if verbose:
+                    print(f"    DTM output skipped: {dtm_err}", file=sys.stderr)
+            else:
+                print(f"WARNING: DTM write failed for {las_path.name}: {dtm_err}", file=sys.stderr)
+
+    # Optional multi-surface HAG raster output
+    if emit_hag_surfaces_dir is not None and _hag_surfaces is not None:
+        surface_names = ["max", "p95", "p90", "p50", "mean", "std"]
+        for surface_name in surface_names:
+            surface_arr = _hag_surfaces.get(surface_name)
+            if surface_arr is None:
+                continue
+            surface_path = emit_hag_surfaces_dir / f"{las_path.stem}_hag_{surface_name}.tif"
+            surface_err = _write_geotiff(
+                surface_arr,
+                surface_path,
+                np.array(meta["mins"]),
+                cell_res,
+                dtm_crs,
+                nodata=np.nan,
+            )
+            if surface_err:
+                if "rasterio not available" in surface_err:
+                    if verbose:
+                        print(f"    HAG surface output skipped: {surface_err}", file=sys.stderr)
+                    break  # Don't repeat warning for each surface
+                else:
+                    print(f"WARNING: HAG {surface_name} write failed for {las_path.name}: {surface_err}", file=sys.stderr)
+
     # Optional slope (degrees) from ground surface for terrain gating
     slope_arr: Optional[np.ndarray] = None
     if slope_max_deg is not None:
@@ -1240,21 +1841,23 @@ def process_file(las_path: Path,
         slope_rad = np.arctan(np.hypot(gx, gy))
         slope_arr = np.degrees(slope_rad).astype(np.float32)
 
-    # Feature enrichment pass — build per-cell grids for intensity, RGB, return count
+    # Feature enrichment pass — build per-cell grids for intensity, RGB, return count, z_std
     do_enrichment = extract_features or extract_intensity
+    _want_z_std = emit_blob_features or extract_features
     enrichment_grids: Dict[str, Optional[np.ndarray]] = {}
-    if do_enrichment:
+    if do_enrichment or _want_z_std:
         enrichment_grids = _build_enrichment_grids(
             las_path, chunk_size,
             mins=np.array(meta["mins"]),
             cell_res=cell_res, ny=ny, nx=nx,
-            include_intensity=True,
+            include_intensity=do_enrichment,
             include_rgb=extract_features,
             include_returns=extract_features,
+            include_z_std=_want_z_std,
             verbose=verbose,
         )
 
-    count, labeled, dets = detect_penguins_from_hag(
+    count, labeled, dets, _watershed_stats = detect_penguins_from_hag(
         hag, hag_min, hag_max, min_area_cells, max_area_cells,
         smooth_sigma=0.0, connectivity=connectivity,
         slope=slope_arr, slope_max_deg=slope_max_deg,
@@ -1268,6 +1871,8 @@ def process_file(las_path: Path,
         h_maxima_h=h_maxima_h,
         min_split_area_cells=min_split_area_cells,
         border_trim_px=border_trim_px,
+        watershed_merge_threshold=watershed_merge_threshold,
+        emit_diagnostics=emit_watershed_diagnostics,
     )
 
     # Enrich detections with features from enrichment grids
@@ -1329,6 +1934,66 @@ def process_file(las_path: Path,
         d.setdefault("tile", las_path.stem)
         d.setdefault("id", f"{las_path.stem}:{i:05d}")
         d.setdefault("file", str(las_path))
+
+    # Optional comprehensive blob feature extraction
+    # IMPORTANT: Extract AFTER detection sorting so IDs align with output JSON
+    _blob_features: Optional[List[BlobFeatures]] = None
+    if emit_blob_features and count > 0:
+        # Create mapping from region label to detection ID
+        label_to_det_id = {d["label"]: d["id"] for d in dets if "label" in d}
+
+        _blob_features = extract_blob_features(
+            labeled,
+            hag,
+            cell_res,
+            np.array(meta["mins"]),
+            tile_name=las_path.stem,
+            intensity_grid=enrichment_grids.get("intensity") if do_enrichment else None,
+            rgb_r_grid=enrichment_grids.get("rgb_r") if do_enrichment else None,
+            rgb_g_grid=enrichment_grids.get("rgb_g") if do_enrichment else None,
+            rgb_b_grid=enrichment_grids.get("rgb_b") if do_enrichment else None,
+            point_count_grid=_count_grid,
+            single_return_grid=enrichment_grids.get("single_return_fraction") if do_enrichment else None,
+            normalize_spectral=True,
+            split_labels=_watershed_stats.get("split_labels"),
+            z_std_grid=enrichment_grids.get("z_std"),
+        )
+
+        # Update blob feature IDs to match detection IDs
+        for feat in _blob_features:
+            if feat.label in label_to_det_id:
+                feat.detection_id = label_to_det_id[feat.label]
+
+        # Apply classifier if model provided
+        if classifier_model is not None:
+            _apply_classifier(classifier_model, _blob_features, dets)
+
+    # Also apply classifier if no blob features but classifier_model provided
+    # (need to extract features on demand for classifier inference)
+    elif classifier_model is not None and count > 0:
+        # Extract minimal blob features for classification only
+        label_to_det_id = {d["label"]: d["id"] for d in dets if "label" in d}
+        _temp_features = extract_blob_features(
+            labeled,
+            hag,
+            cell_res,
+            np.array(meta["mins"]),
+            tile_name=las_path.stem,
+            intensity_grid=enrichment_grids.get("intensity") if do_enrichment else None,
+            rgb_r_grid=enrichment_grids.get("rgb_r") if do_enrichment else None,
+            rgb_g_grid=enrichment_grids.get("rgb_g") if do_enrichment else None,
+            rgb_b_grid=enrichment_grids.get("rgb_b") if do_enrichment else None,
+            point_count_grid=_count_grid,
+            single_return_grid=enrichment_grids.get("single_return_fraction") if do_enrichment else None,
+            normalize_spectral=True,
+            split_labels=_watershed_stats.get("split_labels"),
+            z_std_grid=enrichment_grids.get("z_std"),
+        )
+        for feat in _temp_features:
+            if feat.label in label_to_det_id:
+                feat.detection_id = label_to_det_id[feat.label]
+        _apply_classifier(classifier_model, _temp_features, dets)
+
     info = {
         "path": str(las_path),
         "count": int(count),
@@ -1339,6 +2004,10 @@ def process_file(las_path: Path,
         "hag_max": hag_max,
         "detections": dets,
     }
+
+    # Store blob features for aggregation if extracted
+    if _blob_features is not None:
+        info["_blob_features"] = _blob_features  # Internal, not serialized to JSON
     # Record actual ground method used (may differ from requested if CSF fell back)
     if _actual_ground_method != ground_method:
         info["ground_method_requested"] = ground_method
@@ -1363,6 +2032,38 @@ def process_file(las_path: Path,
         }
         if occupied.size > 0:
             info["density"]["mean_pts_per_occupied_cell"] = round(float(np.mean(occupied)), 2)
+
+    # Optional DTM quality metrics
+    if emit_dtm_quality and _count_grid is not None:
+        from pipelines.dtm_quality import compute_dtm_quality_metrics
+        info["dtm_quality"] = compute_dtm_quality_metrics(dem, _count_grid, cell_res)
+
+    # Watershed statistics (if any splitting was attempted)
+    if apply_watershed and _watershed_stats.get("n_candidates", 0) > 0:
+        info["watershed"] = {
+            "enabled": True,
+            "h_maxima_h": h_maxima_h,
+            "min_split_area_cells": min_split_area_cells,
+            "n_candidates": _watershed_stats["n_candidates"],
+            "n_splits": _watershed_stats["n_splits"],
+            "n_new_regions": _watershed_stats["n_new_regions"],
+            "split_rate": round(_watershed_stats["n_splits"] / max(_watershed_stats["n_candidates"], 1), 3),
+        }
+    elif apply_watershed:
+        info["watershed"] = {
+            "enabled": True,
+            "h_maxima_h": h_maxima_h,
+            "min_split_area_cells": min_split_area_cells,
+            "n_candidates": 0,
+            "n_splits": 0,
+            "n_new_regions": 0,
+        }
+    # Append watershed diagnostics if collected
+    if emit_watershed_diagnostics and "diagnostics" in _watershed_stats:
+        if "watershed" not in info:
+            info["watershed"] = {"enabled": apply_watershed}
+        info["watershed"]["diagnostics"] = _watershed_stats["diagnostics"]
+
     if emit_geojson_path is not None and dets:
         out_crs = geojson_crs
         coord_units = geojson_coord_units
@@ -1466,6 +2167,132 @@ def _validate_params(args: argparse.Namespace) -> None:
         raise SystemExit("Parameter validation failed:\n  " + "\n  ".join(errors))
 
 
+def _write_effective_config(
+    out_dir: Path,
+    args: argparse.Namespace,
+    crs_meta: Optional[Dict[str, object]],
+    crs_source: str,
+    input_files: List[Path],
+) -> Path:
+    """Write effective configuration artifact for reproducibility.
+
+    Emits ``config.effective.json`` containing all resolved parameters
+    (including defaults), CRS source information, and input file hashes.
+    This enables any run to be replayed from the config + input data.
+
+    Returns the path to the written config file.
+    """
+    import datetime
+
+    # Compute input file hashes for provenance
+    input_hashes = []
+    for f in input_files:
+        try:
+            h = hashlib.sha256()
+            with open(f, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    h.update(chunk)
+            input_hashes.append({
+                "path": str(f),
+                "sha256": h.hexdigest(),
+                "size_bytes": f.stat().st_size,
+            })
+        except Exception as e:
+            input_hashes.append({
+                "path": str(f),
+                "sha256": None,
+                "error": str(e),
+            })
+
+    # Extract all parameters with their resolved values
+    params = vars(args).copy()
+
+    # Build effective config document
+    config = {
+        "schema_version": "1",
+        "purpose": "effective_config",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "parameters": {
+            # Core geometry
+            "cell_res": params.get("cell_res"),
+            "chunk_size": params.get("chunk_size"),
+            # HAG window
+            "hag_min": params.get("hag_min"),
+            "hag_max": params.get("hag_max"),
+            # Ground/top modeling
+            "ground_method": params.get("ground_method"),
+            "top_method": params.get("top_method"),
+            "top_zscore_cap": params.get("top_zscore_cap"),
+            "top_quantile_lr": params.get("top_quantile_lr"),
+            # Candidate extraction
+            "connectivity": params.get("connectivity"),
+            "min_area_cells": params.get("min_area_cells"),
+            "max_area_cells": params.get("max_area_cells"),
+            # Morphology
+            "refine_grid_pct": params.get("refine_grid_pct"),
+            "refine_size": params.get("refine_size"),
+            "se_radius_m": params.get("se_radius_m"),
+            "circularity_min": params.get("circularity_min"),
+            "solidity_min": params.get("solidity_min"),
+            # Watershed
+            "watershed": params.get("watershed"),
+            "h_maxima": params.get("h_maxima"),
+            "min_split_area_cells": params.get("min_split_area_cells"),
+            # Terrain
+            "border_trim_px": params.get("border_trim_px"),
+            "slope_max_deg": params.get("slope_max_deg"),
+            # Deduplication
+            "dedupe_radius_m": params.get("dedupe_radius_m"),
+            # CSF
+            "csf_cloth_resolution": params.get("csf_cloth_resolution"),
+            "csf_class_threshold": params.get("csf_class_threshold"),
+            "csf_max_points": params.get("csf_max_points"),
+            # File selection
+            "exclude_dir": params.get("exclude_dir"),
+            "skip_copc": params.get("skip_copc"),
+            "only_las": params.get("only_las"),
+            "max_grid_mb": params.get("max_grid_mb"),
+        },
+        "crs": {
+            "resolved": crs_meta,
+            "source": crs_source,
+            "cli_epsg": params.get("crs_epsg"),
+            "cli_wkt": params.get("crs_wkt"),
+        },
+        "inputs": {
+            "data_root": str(params.get("data_root")),
+            "n_files": len(input_files),
+            "files": input_hashes,
+        },
+        "outputs": {
+            "out": str(params.get("out")),
+            "emit_geojson": params.get("emit_geojson"),
+            "emit_csv": params.get("emit_csv"),
+            "emit_gpkg": params.get("emit_gpkg"),
+            "emit_dtm": params.get("emit_dtm"),
+            "emit_hag_surfaces": params.get("emit_hag_surfaces"),
+            "emit_blob_features": params.get("emit_blob_features"),
+            "plots": params.get("plots"),
+        },
+        "feature_flags": {
+            "extract_intensity": params.get("extract_intensity"),
+            "extract_features": params.get("extract_features"),
+            "compute_confidence": params.get("compute_confidence"),
+            "density_stats": params.get("density_stats"),
+        },
+        "classifier": {
+            "model_path": params.get("classifier_model"),
+        },
+    }
+
+    config_path = out_dir / "config.effective.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+    return config_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LiDAR penguin detection via DEM+HAG")
     parser.add_argument("--data-root", required=True, help="Folder with LAS/LAZ files")
@@ -1473,8 +2300,9 @@ def main() -> None:
     parser.add_argument("--cell-res", type=float, default=0.25, help="DEM/HAG cell size in meters")
     parser.add_argument("--hag-min", type=float, default=0.2, help="Min HAG (m)")
     parser.add_argument("--hag-max", type=float, default=0.6, help="Max HAG (m)")
-    parser.add_argument("--ground-method", default="min", choices=["min","p05","csf"], help="Ground DEM estimator per cell (csf requires cloth-simulation-filter)")
-    parser.add_argument("--top-method", default="max", choices=["max","p95"], help="Top surface estimator per cell (max recommended; p95 quantile estimator has convergence issues)")
+    parser.add_argument("--ground-method", default="p05", choices=["min","p05","csf"], help="Ground DEM estimator per cell: p05 (default, robust 5th percentile), min (cell minimum), or csf (requires cloth-simulation-filter)")
+    parser.add_argument("--top-method", default="max", choices=["max","p95","p95-online","p95-exact"],
+                        help="Top surface estimator per cell: max (default), p95 (histogram-based), p95-online (experimental online), p95-exact (two-pass exact percentile)")
     parser.add_argument("--top-zscore-cap", type=float, default=3.0, help="Z-score cap for top outliers")
     parser.add_argument("--top-quantile-lr", type=float, default=0.05, help="Learning rate for online p95 quantile")
     parser.add_argument("--connectivity", type=int, default=2, choices=[1,2], help="Connectivity for labeling (2 = 8-connected)")
@@ -1506,6 +2334,21 @@ def main() -> None:
     parser.add_argument("--plot-vmax", type=float, default=None, help="Fixed vmax for global plot scaling")
     parser.add_argument("--emit-csv", action="store_true", help="Also write aggregated detections CSV alongside JSON summary")
     parser.add_argument("--csv-path", default=None, help="Optional CSV output path (default: results/lidar_hag_detections.csv)")
+    parser.add_argument(
+        "--emit-dtm",
+        action="store_true",
+        help="Write ground DTM as GeoTIFF per tile (requires rasterio; graceful skip if unavailable).",
+    )
+    parser.add_argument(
+        "--emit-hag-surfaces",
+        action="store_true",
+        help="Write multiple HAG surface GeoTIFFs per tile: hag_max, hag_p95, hag_mean, hag_std (requires rasterio).",
+    )
+    parser.add_argument(
+        "--emit-blob-features",
+        action="store_true",
+        help="Write comprehensive blob features to Parquet file (requires pandas/pyarrow).",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose progress")
     parser.add_argument(
         "--max-grid-mb",
@@ -1532,6 +2375,10 @@ def main() -> None:
     parser.add_argument("--watershed", action="store_true", help="Enable h-maxima + watershed splitting inside large blobs")
     parser.add_argument("--h-maxima", type=float, default=0.05, help="h parameter for h-maxima seed extraction (meters)")
     parser.add_argument("--min-split-area-cells", type=int, default=12, help="Only attempt watershed on blobs with at least this many cells")
+    parser.add_argument("--watershed-merge-threshold", type=float, default=1.5, help="Area multiplier for 'likely merged' trigger (default 1.5x expected penguin area)")
+    parser.add_argument("--emit-watershed-diagnostics", action="store_true", help="Include per-blob watershed split decisions in output JSON")
+    parser.add_argument("--profile", default=None, choices=list(SENSOR_PROFILES.keys()),
+                        help="Sensor profile for recommended parameters; warns if CLI values differ")
     parser.add_argument("--border-trim-px", type=int, default=0, help="Ignore detections closer than N pixels to any image edge")
     parser.add_argument("--slope-max-deg", type=float, default=None, help="Drop candidates where ground slope exceeds this many degrees")
     parser.add_argument("--dedupe-radius-m", type=float, default=None, help="If set, de-duplicate detections across tiles within this radius (meters)")
@@ -1540,7 +2387,10 @@ def main() -> None:
                         help="Extract all available per-detection features: intensity (905nm), RGB color, "
                              "single-return fraction, and HAG height profile.  Superset of --extract-intensity.")
     parser.add_argument("--compute-confidence", action="store_true", help="Compute a [0,1] confidence score per detection based on HAG, area, and shape features")
+    parser.add_argument("--classifier-model", type=str, default=None,
+                        help="Path to trained blob classifier model (.pkl) for probability scoring")
     parser.add_argument("--density-stats", action="store_true", help="Compute per-tile point density statistics (total points, pts/m², empty cells, etc.)")
+    parser.add_argument("--emit-dtm-quality", action="store_true", help="Compute DTM quality metrics per tile (roughness, support, coverage flags)")
     # CSF ground model options
     parser.add_argument("--csf-cloth-resolution", type=float, default=0.5, help="CSF cloth resolution (meters)")
     parser.add_argument("--csf-class-threshold", type=float, default=0.3, help="CSF classification threshold (meters)")
@@ -1554,6 +2404,36 @@ def main() -> None:
     if args.ground_method == "csf" and not HAS_CSF:
         raise SystemExit("CSF not installed. Run: pip install cloth-simulation-filter")
     _validate_params(args)
+
+    # Profile validation: warn if CLI values differ from profile recommendations
+    _active_profile = None
+    if args.profile:
+        _active_profile = SENSOR_PROFILES[args.profile]
+        _profile_warnings = []
+        if _active_profile.ground_method != args.ground_method:
+            _profile_warnings.append(
+                f"ground_method: CLI={args.ground_method}, profile={_active_profile.ground_method}"
+            )
+        if _active_profile.top_method != args.top_method:
+            _profile_warnings.append(
+                f"top_method: CLI={args.top_method}, profile={_active_profile.top_method}"
+            )
+        if _active_profile.h_maxima_h is not None and _active_profile.h_maxima_h != args.h_maxima:
+            _profile_warnings.append(
+                f"h_maxima: CLI={args.h_maxima}, profile={_active_profile.h_maxima_h}"
+            )
+        if _active_profile.min_split_area_cells is not None and _active_profile.min_split_area_cells != args.min_split_area_cells:
+            _profile_warnings.append(
+                f"min_split_area_cells: CLI={args.min_split_area_cells}, profile={_active_profile.min_split_area_cells}"
+            )
+        if _active_profile.watershed_merge_threshold is not None and _active_profile.watershed_merge_threshold != args.watershed_merge_threshold:
+            _profile_warnings.append(
+                f"watershed_merge_threshold: CLI={args.watershed_merge_threshold}, profile={_active_profile.watershed_merge_threshold}"
+            )
+        if _profile_warnings:
+            print(f"WARNING: CLI parameters differ from profile '{args.profile}':", file=sys.stderr)
+            for w in _profile_warnings:
+                print(f"  {w}", file=sys.stderr)
 
     data_root = Path(args.data_root).resolve()
     out_path = Path(args.out).resolve()
@@ -1578,6 +2458,12 @@ def main() -> None:
     det_geojson_dir = out_path.parent / "lidar_hag_geojson" if args.emit_geojson else None
     if det_geojson_dir is not None:
         det_geojson_dir.mkdir(parents=True, exist_ok=True)
+    dtm_dir = out_path.parent / "lidar_hag_dtm" if args.emit_dtm else None
+    if dtm_dir is not None:
+        dtm_dir.mkdir(parents=True, exist_ok=True)
+    hag_surfaces_dir = out_path.parent / "lidar_hag_surfaces" if args.emit_hag_surfaces else None
+    if hag_surfaces_dir is not None:
+        hag_surfaces_dir.mkdir(parents=True, exist_ok=True)
 
     # CRS resolution: explicit CLI arg > auto-detect from LAS headers > None
     crs_meta = _crs_meta_from_args(args.crs_epsg, args.crs_wkt)
@@ -1617,19 +2503,39 @@ def main() -> None:
                 file=sys.stderr,
             )
 
+    # Determine CRS source for provenance
+    crs_source = "cli" if autodetected_crs is None and crs_meta is not None else (
+        "autodetect" if autodetected_crs is not None and _crs_meta_from_args(args.crs_epsg, args.crs_wkt) is None else "cli"
+    )
+
     summary = {
         "schema_version": "1",
         "purpose": LIDAR_CANDIDATES_PURPOSE,
         "contract": LIDAR_CANDIDATES_CONTRACT,
         "policy": as_policy_dict(),
         "crs": crs_meta,
-        "crs_source": "cli" if autodetected_crs is None and crs_meta is not None else ("autodetect" if autodetected_crs is not None and _crs_meta_from_args(args.crs_epsg, args.crs_wkt) is None else "cli"),
+        "crs_source": crs_source,
         "coord_units": coord_units,
         "data_root": str(data_root),
         "params": vars(args).copy(),
         "files": [],
         "total_count": 0,
     }
+    if _active_profile is not None:
+        summary["profile"] = {
+            "name": _active_profile.name,
+            "notes": _active_profile.notes,
+        }
+
+    # Write effective config artifact for reproducibility
+    effective_config_path = _write_effective_config(
+        out_path.parent,
+        args,
+        crs_meta,
+        crs_source,
+        files,
+    )
+    summary["effective_config"] = str(effective_config_path)
 
     # Optional: compute global color bounds for consistent plotting across tiles
     global_vmin: Optional[float] = None
@@ -1686,6 +2592,24 @@ def main() -> None:
             else:
                 global_vmax = float(args.hag_max)
 
+    # Load classifier model if provided
+    _classifier_model: Optional[Dict] = None
+    if args.classifier_model:
+        classifier_path = Path(args.classifier_model)
+        if not classifier_path.exists():
+            print(f"WARNING: Classifier model not found: {classifier_path}", file=sys.stderr)
+        else:
+            try:
+                import pickle
+                with open(classifier_path, "rb") as clf_f:
+                    _classifier_model = pickle.load(clf_f)
+                if args.verbose:
+                    print(f"Loaded classifier model from {classifier_path}")
+                    if "top_features" in _classifier_model:
+                        print(f"  Top features: {_classifier_model['top_features']}")
+            except Exception as e:
+                print(f"WARNING: Failed to load classifier model: {e}", file=sys.stderr)
+
     all_detections: list[dict] = []
     file_errors: list[dict] = []
     for f in files:
@@ -1717,6 +2641,8 @@ def main() -> None:
                 apply_watershed=args.watershed,
                 h_maxima_h=args.h_maxima,
                 min_split_area_cells=args.min_split_area_cells,
+                watershed_merge_threshold=args.watershed_merge_threshold,
+                emit_watershed_diagnostics=args.emit_watershed_diagnostics,
                 border_trim_px=args.border_trim_px,
                 slope_max_deg=args.slope_max_deg,
                 connectivity=args.connectivity,
@@ -1734,6 +2660,12 @@ def main() -> None:
                 csf_cloth_resolution=args.csf_cloth_resolution,
                 csf_class_threshold=args.csf_class_threshold,
                 csf_max_points=args.csf_max_points,
+                emit_dtm_dir=dtm_dir,
+                dtm_crs=crs_meta,
+                emit_hag_surfaces_dir=hag_surfaces_dir,
+                emit_blob_features=args.emit_blob_features,
+                classifier_model=_classifier_model,
+                emit_dtm_quality=args.emit_dtm_quality,
             )
         except Exception as exc:
             msg = f"Failed to process {f.name}: {exc}"
@@ -1748,6 +2680,34 @@ def main() -> None:
                 all_detections.append(d)
     if file_errors:
         summary["file_errors"] = file_errors
+
+    # Aggregate blob features from all tiles and write to Parquet
+    if args.emit_blob_features:
+        all_blob_features: List[BlobFeatures] = []
+        for fi in summary["files"]:
+            tile_features = fi.pop("_blob_features", None)
+            if tile_features:
+                all_blob_features.extend(tile_features)
+
+        if all_blob_features:
+            try:
+                from pipelines.blob_features import features_to_parquet
+                features_path = out_path.parent / "blob_features.parquet"
+                features_to_parquet(all_blob_features, features_path)
+                summary["blob_features"] = {
+                    "path": str(features_path),
+                    "n_features": len(all_blob_features),
+                }
+                if args.verbose:
+                    print(f"Wrote {len(all_blob_features)} blob features to {features_path}")
+            except ImportError as e:
+                msg = f"Could not write blob features (missing pandas/pyarrow): {e}"
+                print(f"WARNING: {msg}", file=sys.stderr)
+                summary["blob_features_error"] = msg
+            except Exception as e:
+                msg = f"Error writing blob features: {e}"
+                print(f"WARNING: {msg}", file=sys.stderr)
+                summary["blob_features_error"] = msg
 
     # Cross-tile de-duplication (batch artifact + count)
     deduped: list[dict] | None = None

@@ -18,6 +18,10 @@ class LidarProfile:
     ground_method: str
     top_method: str
     notes: str
+    # Watershed parameters (optional — None means "use CLI default")
+    h_maxima_h: Optional[float] = None
+    min_split_area_cells: Optional[int] = None
+    watershed_merge_threshold: Optional[float] = None
 
 
 OFFICIAL_DETERMINISTIC = LidarProfile(
@@ -32,6 +36,37 @@ OFFICIAL_DETERMINISTIC = LidarProfile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Sensor-specific profiles (Argentina 2025)
+# ---------------------------------------------------------------------------
+
+DJI_L2_CALETA = LidarProfile(
+    name="dji_l2_caleta",
+    ground_method="p05",
+    top_method="max",
+    notes="DJI L2 sensor at Caleta sites (Tiny Island, Small Island).",
+    h_maxima_h=0.05,
+    min_split_area_cells=12,
+    watershed_merge_threshold=1.5,
+)
+
+TRUEVIEW_515_SAN_LORENZO = LidarProfile(
+    name="trueview_515_san_lorenzo",
+    ground_method="p05",
+    top_method="max",
+    notes="TrueView 515 sensor at San Lorenzo sites.",
+    h_maxima_h=0.05,
+    min_split_area_cells=15,
+    watershed_merge_threshold=1.5,
+)
+
+# Lookup table for --profile CLI arg
+SENSOR_PROFILES: Dict[str, LidarProfile] = {
+    "dji_l2_caleta": DJI_L2_CALETA,
+    "trueview_515_san_lorenzo": TRUEVIEW_515_SAN_LORENZO,
+}
+
+
 def as_policy_dict() -> Dict[str, object]:
     """Small policy block that can be embedded in summary outputs."""
     return {
@@ -42,5 +77,3 @@ def as_policy_dict() -> Dict[str, object]:
             "p95_is_experimental": True,
         }
     }
-
-

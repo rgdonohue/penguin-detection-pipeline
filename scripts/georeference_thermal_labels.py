@@ -12,6 +12,10 @@ Usage:
         --labels-csv data/2025/thermal-penguin-labels/labels_my-project-name_2025-12-03-04-07-18.csv \
         --image-dir data/2025/thermal-penguin-labels \
         --out-json data/processed/thermal_labels_georef.json
+
+Optional:
+    --exiftool /path/to/exiftool
+    --col-label 0 --col-x 1 --col-y 2 --col-image 3
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -149,37 +154,97 @@ def _apply_homography(H: np.ndarray, pixels: np.ndarray) -> np.ndarray:
 
 # ── EXIF / Labels I/O ──────────────────────────────────────────────
 
-def _extract_exif(img_path: Path) -> dict:
+def _extract_exif(img_path: Path, exiftool_bin: str) -> dict:
     """Extract GPS and gimbal from DJI thermal image via exiftool."""
-    r = subprocess.run(
-        ["exiftool", "-n", "-json", str(img_path)],
-        capture_output=True, text=True, timeout=10,
-    )
-    d = json.loads(r.stdout)[0]
+    try:
+        r = subprocess.run(
+            [exiftool_bin, "-n", "-json", str(img_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"exiftool timed out for {img_path}") from exc
+
+    if r.returncode != 0:
+        stderr = (r.stderr or "").strip()
+        raise RuntimeError(f"exiftool failed for {img_path}: {stderr or 'unknown error'}")
+
+    try:
+        d = json.loads(r.stdout)[0]
+    except (json.JSONDecodeError, IndexError) as exc:
+        raise RuntimeError(f"exiftool returned invalid JSON for {img_path}") from exc
+
+    def _get_float(key: str) -> float | None:
+        if key not in d:
+            return None
+        try:
+            return float(d[key])
+        except (TypeError, ValueError):
+            return None
+
     return {
-        "lat": float(d["GPSLatitude"]),
-        "lon": float(d["GPSLongitude"]),
-        "alt_abs": float(d["AbsoluteAltitude"]),
-        "alt_rel": float(d["RelativeAltitude"]),
-        "gimbal_yaw": float(d["GimbalYawDegree"]),
-        "gimbal_pitch": float(d["GimbalPitchDegree"]),
-        "gimbal_roll": float(d["GimbalRollDegree"]),
+        "lat": _get_float("GPSLatitude"),
+        "lon": _get_float("GPSLongitude"),
+        "alt_abs": _get_float("AbsoluteAltitude"),
+        "alt_rel": _get_float("RelativeAltitude"),
+        "gimbal_yaw": _get_float("GimbalYawDegree"),
+        "gimbal_pitch": _get_float("GimbalPitchDegree"),
+        "gimbal_roll": _get_float("GimbalRollDegree"),
     }
 
 
-def _parse_labels(csv_path: Path) -> Dict[str, List[dict]]:
+def _parse_labels(
+    csv_path: Path,
+    col_label: int,
+    col_x: int,
+    col_y: int,
+    col_image: int,
+) -> Tuple[Dict[str, List[dict]], Dict[str, int]]:
     """Parse labels CSV, group by image filename."""
     by_image: Dict[str, List[dict]] = defaultdict(list)
-    with open(csv_path) as f:
+    stats = {"rows": 0, "skipped_short": 0, "skipped_header": 0, "skipped_parse": 0}
+
+    def _is_int(s: str) -> bool:
+        try:
+            int(s)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.reader(f):
-            if len(row) < 6:
+            if not row:
                 continue
-            by_image[row[3].strip()].append({
-                "label": row[0].strip(),
-                "px": int(row[1]),
-                "py": int(row[2]),
-            })
-    return dict(by_image)
+            stats["rows"] += 1
+            if max(col_label, col_x, col_y, col_image) >= len(row):
+                stats["skipped_short"] += 1
+                continue
+
+            if not _is_int(row[col_x]) or not _is_int(row[col_y]):
+                stats["skipped_header"] += 1
+                continue
+
+            try:
+                by_image[row[col_image].strip()].append({
+                    "label": row[col_label].strip(),
+                    "px": int(row[col_x]),
+                    "py": int(row[col_y]),
+                })
+            except (TypeError, ValueError):
+                stats["skipped_parse"] += 1
+                continue
+
+    return dict(by_image), stats
+
+
+def _signed_area(points: np.ndarray) -> float:
+    """Signed polygon area for orientation checks."""
+    if len(points) < 3:
+        return 0.0
+    x = points[:, 0]
+    y = points[:, 1]
+    return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
 # ── Multi-view clustering ──────────────────────────────────────────
@@ -189,8 +254,11 @@ def _cluster_positions(positions: List[dict], radius_m: float) -> List[dict]:
     if not positions:
         return []
 
-    from scipy.cluster.hierarchy import fcluster, linkage
-    from scipy.spatial.distance import pdist
+    try:
+        from scipy.cluster.hierarchy import fcluster, linkage
+        from scipy.spatial.distance import pdist
+    except ImportError as exc:
+        raise RuntimeError("scipy is required for clustering; install requirements-full.txt") from exc
 
     coords = np.array([[p["easting"], p["northing"]] for p in positions])
 
@@ -245,6 +313,11 @@ def main():
     ap.add_argument("--out-json", required=True)
     ap.add_argument("--cluster-radius", type=float, default=2.0)
     ap.add_argument("--crs-epsg", type=int, default=32720)
+    ap.add_argument("--exiftool", default="exiftool", help="Path to exiftool binary")
+    ap.add_argument("--col-label", type=int, default=0, help="CSV column index for label")
+    ap.add_argument("--col-x", type=int, default=1, help="CSV column index for pixel x")
+    ap.add_argument("--col-y", type=int, default=2, help="CSV column index for pixel y")
+    ap.add_argument("--col-image", type=int, default=3, help="CSV column index for image filename")
     args = ap.parse_args()
 
     labels_csv = Path(args.labels_csv)
@@ -265,8 +338,30 @@ def main():
         e, n = corners_utm[name]
         print(f"  {name}: ({e:.2f}, {n:.2f})")
 
-    labels_by_image = _parse_labels(labels_csv)
-    print(f"\nLabels loaded: {sum(len(v) for v in labels_by_image.values())} across {len(labels_by_image)} images")
+    exiftool_bin = args.exiftool
+    if exiftool_bin == "exiftool":
+        if shutil.which(exiftool_bin) is None:
+            sys.exit("ERROR: exiftool not found in PATH. Install it or pass --exiftool.")
+    else:
+        if shutil.which(exiftool_bin) is None and not Path(exiftool_bin).exists():
+            sys.exit(f"ERROR: exiftool not found at {exiftool_bin}")
+
+    labels_by_image, csv_stats = _parse_labels(
+        labels_csv,
+        col_label=args.col_label,
+        col_x=args.col_x,
+        col_y=args.col_y,
+        col_image=args.col_image,
+    )
+    n_labels = sum(len(v) for v in labels_by_image.values())
+    print(f"\nLabels loaded: {n_labels} across {len(labels_by_image)} images")
+    if csv_stats["skipped_short"] or csv_stats["skipped_header"] or csv_stats["skipped_parse"]:
+        print(
+            "CSV skips:"
+            f" short={csv_stats['skipped_short']},"
+            f" header={csv_stats['skipped_header']},"
+            f" parse={csv_stats['skipped_parse']}"
+        )
 
     all_projected = []
     image_results = []
@@ -281,9 +376,32 @@ def main():
             print(f"  WARNING: not found, skipping")
             continue
 
-        exif = _extract_exif(img_path)
-        print(f"  GPS: ({exif['lat']:.7f}, {exif['lon']:.7f})  alt={exif['alt_abs']:.1f}m MSL ({exif['alt_rel']:.1f}m AGL)")
-        print(f"  Gimbal: yaw={exif['gimbal_yaw']:.1f}° pitch={exif['gimbal_pitch']:.1f}° roll={exif['gimbal_roll']:.1f}°")
+        try:
+            exif = _extract_exif(img_path, exiftool_bin=exiftool_bin)
+        except RuntimeError as exc:
+            print(f"  WARNING: {exc}, skipping")
+            continue
+
+        if exif["lat"] is None or exif["lon"] is None:
+            print("  WARNING: missing GPSLatitude/GPSLongitude, skipping")
+            continue
+        if exif["gimbal_yaw"] is None:
+            print("  WARNING: missing GimbalYawDegree, skipping")
+            continue
+
+        alt_abs = exif["alt_abs"]
+        alt_rel = exif["alt_rel"]
+        gimbal_pitch = exif["gimbal_pitch"]
+        gimbal_roll = exif["gimbal_roll"]
+        print(
+            f"  GPS: ({exif['lat']:.7f}, {exif['lon']:.7f})  "
+            f"alt={alt_abs:.1f}m MSL ({alt_rel:.1f}m AGL)"
+            if alt_abs is not None and alt_rel is not None
+            else f"  GPS: ({exif['lat']:.7f}, {exif['lon']:.7f})"
+        )
+        pitch_str = f"{gimbal_pitch:.1f}°" if gimbal_pitch is not None else "n/a"
+        roll_str = f"{gimbal_roll:.1f}°" if gimbal_roll is not None else "n/a"
+        print(f"  Gimbal: yaw={exif['gimbal_yaw']:.1f}° pitch={pitch_str} roll={roll_str}")
 
         # Labeled "Box Corner" pixels
         corner_labels = [l for l in labels if l["label"] == "Box Corner"]
@@ -292,6 +410,9 @@ def main():
             continue
 
         pixel_corners = [(l["px"], l["py"]) for l in corner_labels]
+        if len(set(pixel_corners)) != 4:
+            print("  WARNING: duplicate box-corner pixels, skipping")
+            continue
 
         # Match pixel corners to compass labels using oblique view geometry
         matched = _order_corners_by_view(pixel_corners, exif["gimbal_yaw"])
@@ -303,6 +424,14 @@ def main():
         src_pts = np.array([matched[c] for c in CORNER_ORDER], dtype=float)
         dst_pts = np.array([list(corners_utm[c]) for c in CORNER_ORDER], dtype=float)
         H = _compute_homography(src_pts, dst_pts)
+
+        # Orientation sanity check (warn on likely corner mismatch)
+        img_area = _signed_area(src_pts)
+        world_area = _signed_area(dst_pts)
+        if img_area == 0.0 or world_area == 0.0:
+            print("  WARNING: degenerate corner polygon (area=0)")
+        elif np.sign(img_area) != np.sign(world_area):
+            print("  WARNING: corner order likely flipped (orientation mismatch)")
 
         # Validate homography: reproject corners and check errors
         reproj = _apply_homography(H, src_pts)

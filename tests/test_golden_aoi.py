@@ -185,6 +185,7 @@ class TestLiDARPipeline:
             "--hag-max", "0.6",
             "--min-area-cells", "2",
             "--max-area-cells", "80",
+            "--ground-method", "min",  # Explicit for reproducibility (p05 is now default)
             "--top-method", "max",
             "--emit-geojson",
             "--crs-epsg", "32720",
@@ -303,6 +304,57 @@ class TestLiDARPipeline:
         assert "timestamp" in prov, "Missing timestamp in provenance"
         assert "script" in prov, "Missing script name in provenance"
         assert "params" in prov, "Missing params in provenance"
+
+    def test_effective_config_artifact(self):
+        """Verify effective config artifact was created with expected structure."""
+        config_path = TEST_OUTPUT_DIR / "config.effective.json"
+        assert config_path.exists(), f"Effective config not found: {config_path}"
+
+        with open(config_path) as f:
+            config = json.load(f)
+
+        # Check required sections
+        assert config.get("schema_version") == "1", "Invalid schema version"
+        assert config.get("purpose") == "effective_config", "Invalid purpose"
+        assert "timestamp" in config, "Missing timestamp"
+        assert "parameters" in config, "Missing parameters section"
+        assert "crs" in config, "Missing CRS section"
+        assert "inputs" in config, "Missing inputs section"
+        assert "outputs" in config, "Missing outputs section"
+
+        # Verify key parameters are captured
+        params = config["parameters"]
+        assert "cell_res" in params, "Missing cell_res in parameters"
+        assert "hag_min" in params, "Missing hag_min in parameters"
+        assert "hag_max" in params, "Missing hag_max in parameters"
+        assert "ground_method" in params, "Missing ground_method in parameters"
+        assert "top_method" in params, "Missing top_method in parameters"
+
+        # Verify inputs section has file hashes for reproducibility
+        inputs = config["inputs"]
+        assert "n_files" in inputs, "Missing n_files in inputs"
+        assert "files" in inputs, "Missing files in inputs"
+        assert len(inputs["files"]) > 0, "No input files recorded"
+
+        # Check that input file has hash
+        first_file = inputs["files"][0]
+        assert "sha256" in first_file, "Missing sha256 hash for input file"
+        assert first_file["sha256"] is not None, "Input file hash is None"
+
+    def test_artifact_contract_validation(self):
+        """Verify all required artifacts are present according to contract."""
+        from pipelines.contracts import validate_artifact_contract
+
+        is_valid, errors = validate_artifact_contract(
+            TEST_OUTPUT_DIR,
+            emit_geojson=True,
+            emit_plots=True,
+            emit_dtm=False,
+            emit_csv=False,
+            emit_gpkg=False,
+        )
+
+        assert is_valid, f"Artifact contract validation failed:\n" + "\n".join(errors)
 
     def test_reproducibility(self):
         """Verify output signature matches expected baseline without re-running."""

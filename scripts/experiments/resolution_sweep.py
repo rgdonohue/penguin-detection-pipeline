@@ -72,7 +72,7 @@ def _run_at_resolution(
 
     # HAG and detection
     hag = lidar.build_hag_grid(las_path, dem, meta, chunk_size, top_method="max")
-    count, labeled, dets = lidar.detect_penguins_from_hag(
+    count, labeled, dets, _ = lidar.detect_penguins_from_hag(
         hag, hag_min, hag_max, min_area_cells, max_area_cells,
         connectivity=2, cell_res=cell_res, mins=np.array(meta["mins"]),
     )
