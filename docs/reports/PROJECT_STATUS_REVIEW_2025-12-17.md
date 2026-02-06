@@ -177,7 +177,7 @@ The ~3,705 figure represents **total penguin counts** from field observations, N
 | 4 | Update STATUS.md with current state | 30 min |
 | 5 | Update pipeline_todo.md with accurate progress | 30 min |
 | 6 | Update RUNBOOK.md with Argentina commands | 30 min |
-| 7 | Clarify ground truth (48 waypoints vs 3,705 count) | 15 min |
+| 7 | Clarify ground truth (45 waypoints vs 3,705 count) | 15 min |
 
 ### Technical Debt
 

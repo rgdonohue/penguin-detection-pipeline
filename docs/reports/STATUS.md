@@ -23,7 +23,7 @@ Last updated: 2026-02-02 UTC
 - 25.8 GB across DJI L2 and TrueView 515 sensors
 
 **Validation Progress (2026-02-02):**
-- AOI-clipped evaluation complete for Caleta sites (~315/317 inside AOI at Tiny Island; 1,255/1,473 at Small Island)
+- AOI-clipped evaluation complete for Caleta sites (341 total at Tiny Island with `--top-method max --skip-copc`; 1,255/1,473 at Small Island)
 - Per-detection feature extraction done for 3 sites (Caleta Tiny, Caleta Small, San Lorenzo box count) — RGB, intensity, greenness, morphological features
 - Cross-sensor comparison (DJI L2 vs TrueView 515): intensity scales incompatible; greenness index transfers across sensors
 - Parameter sweep on 2 tiles: hag_max is dominant sensitivity parameter at both sites
@@ -77,7 +77,7 @@ Last updated: 2026-02-02 UTC
 
 - **LiDAR catalogue:** ✅ 24 files, 754M points, 25.8 GB documented
 - **Sensor tuning:** ✅ DJI L2 and TrueView 515 parameters validated
-- **GPS waypoints:** 48 boundary/route waypoints extracted to `data/processed/san_lorenzo_waypoints.csv`
+- **GPS waypoints:** 45 boundary/route waypoints extracted to `data/processed/san_lorenzo_waypoints.csv`
 - **Ground truth counts:** ~3,705 penguins documented across sites (in `san_lorenzo_analysis.json`)
 
 **IMPORTANT:** The 3,705 figure is total penguin COUNT, not georeferenced locations. GPS→pixel projection has NOT been implemented.
@@ -157,12 +157,12 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 ### Completed (this sprint)
 
 1. ~~**Define detection semantics**~~ — ✅ Done (`pipelines/contracts.py`): candidates (blob centroids), not guaranteed individuals
-2. ~~**Implement AOI-clipped evaluation**~~ — ✅ Done (`pipelines/aoi_eval.py`): Caleta Tiny ~315/317, Caleta Small 1255/1473
+2. ~~**Implement AOI-clipped evaluation**~~ — ✅ Done (`pipelines/aoi_eval.py`): Caleta Small 1255/1473; Caleta Tiny AOI eval pending re-run with `--top-method max`
 3. ~~**Lock top-surface estimator**~~ — ✅ Using `max` (deterministic) for all validation work
 4. ~~**Feature analysis**~~ — ✅ Done: RGB, intensity, greenness, morphological for 3 sites across 2 sensors
 5. ~~**Label sample generation**~~ — ✅ Done: 80-sample bundles for Caleta Tiny + Caleta Small with RGB+HAG crops
 
-6. ~~**Top-method bug fix**~~ — ✅ Done: CLI default changed from `p95` to `max`; golden baseline updated 802→776; Caleta Tiny 317 total (vs 321 field = 0.99 ratio)
+6. ~~**Top-method bug fix**~~ — ✅ Done: CLI default changed from `p95` to `max`; golden baseline updated 802→776; Caleta Tiny 341 total with `--top-method max --skip-copc` (vs 321 field = 1.06 ratio). Previous "317" claim not reproducible.
 7. ~~**Pipeline experiments**~~ — ✅ Done (Feb 2026): resolution sweep, ground model comparison, HAG histogram, watershed sweep on 2 sensors/sites. See `docs/reports/LIDAR_METHODOLOGY.md` §5.
 8. ~~**Thermal discrimination POC**~~ — ✅ Done (negative result): oblique thermal at burrow sites does not discriminate penguins from empty burrows
 

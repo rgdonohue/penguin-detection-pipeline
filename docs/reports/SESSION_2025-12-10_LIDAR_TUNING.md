@@ -98,7 +98,7 @@ pdal translate input.las output.las \
 - `data/2025/San_Lorenzo_UTM/box_count_11.9.las` - Reprojected San Lorenzo
 - `data/interim/caleta_small_island.json` - 1,473 detections
 - `data/interim/caleta_small_island_detections.geojson` - GIS-ready output
-- `data/interim/san_lorenzo_box_count.json` - 108 detections
+- `data/interim/san_lorenzo_box_count.json` - 108 detections (NOTE: not reproducible with current code; likely used different parameters or code version)
 - `data/interim/lidar_hag_plots/` - HAG visualization PNGs
 
 ## Data Separation Verification

@@ -357,13 +357,14 @@ python3 scripts/run_lidar_hag.py \
   --min-area-cells 3 --max-area-cells 60 \
   --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
 
-# Caleta Tiny Island (validated: 317 detections vs 321 ground truth = -1%)
+# Caleta Tiny Island (341 detections vs 321 ground truth = +6%)
 python3 scripts/run_lidar_hag.py \
   --data-root "data/2025/Caleta Tiny Island" \
   --out data/interim/caleta_tiny_island.json \
   --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 60 \
-  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
+  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 \
+  --top-method max --skip-copc --plots
 ```
 
 **Key DJI L2 Parameters:**
@@ -384,13 +385,17 @@ pdal translate "data/2025/San Lorenzo Box Count 11.9.25 LAS.las" \
   --filters.reprojection.out_srs="EPSG:32720" \
   -f filters.reprojection
 
-# Step 2: Run detection (validated: 108 detections vs 107 ground truth = +1%)
+# Step 2: Run detection (1,297 detections across 2 tiles — under investigation)
+# NOTE: Previous claim of "108 detections" is not reproducible with current code.
+# The 87 ground-truth penguins are spread across ~5 ha; high detection count
+# likely reflects dense bush vegetation in the HAG band.
 python3 scripts/run_lidar_hag.py \
   --data-root "data/2025/San_Lorenzo_UTM" \
   --out data/interim/san_lorenzo_box_count.json \
   --cell-res 0.3 --hag-min 0.28 --hag-max 0.48 \
   --min-area-cells 3 --max-area-cells 50 \
-  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 --plots
+  --dedupe-radius-m 0.5 --emit-geojson --crs-epsg 32720 \
+  --top-method max --plots
 ```
 
 **Key TrueView 515 Parameters:**
@@ -400,7 +405,7 @@ python3 scripts/run_lidar_hag.py \
 
 **Data Catalogue:**
 - Location: `data/2025/lidar_catalogue_full.json`
-- Total: 24 files, 754M points, 25.8 GB
+- Total: 24 source LAS files, ~762M points, ~25.5 GB (plus COPC/UTM copies)
 - Session report: `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md`
 
 ---

@@ -10,7 +10,7 @@
 
 The team has returned from Argentina with new field data, including **penguin counts collected by Lydia** for multiple penguin colony sites. This data represents a significant opportunity to improve thermal detection calibration, which is currently in research phase with known calibration issues.
 
-**IMPORTANT CLARIFICATION (2025-12-17):** The ~3,705 figure is total penguin COUNT from field observations. We do NOT have 3,705 GPS-tagged penguin locations. The `san_lorenzo_waypoints.csv` file contains 48 boundary/route waypoints, not individual penguin positions. Georeferencing (GPS→pixel projection) is needed to convert count locations to image coordinates.
+**IMPORTANT CLARIFICATION (2025-12-17):** The ~3,705 figure is total penguin COUNT from field observations. We do NOT have 3,705 GPS-tagged penguin locations. The `san_lorenzo_waypoints.csv` file contains 45 boundary/route waypoints, not individual penguin positions. Georeferencing (GPS→pixel projection) is needed to convert count locations to image coordinates.
 
 ---
 
@@ -21,7 +21,7 @@ The team has returned from Argentina with new field data, including **penguin co
 - **Site-level counts (NOT individual GPS locations):**
   - Caleta: Tiny Island (321), Small Island (1,557), Box Counts (8, 12)
   - San Lorenzo: Road (359), Plains (453), Caves (908), Box Counts (32, 55)
-- **Boundary waypoints:** 48 survey boundary/route points in `san_lorenzo_waypoints.csv`
+- **Boundary waypoints:** 45 survey boundary/route points in `san_lorenzo_waypoints.csv`
 - **Data Format:** Penguin counts by site; boundary GPS coordinates documented in PDF notes
 
 ### Sensor Data Collected

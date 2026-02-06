@@ -1,6 +1,6 @@
 # AOI Inventory — Argentina 2025
 
-**Last verified:** 2026-02-03
+**Last verified:** 2026-02-04
 **Source data:** `data/processed/san_lorenzo_analysis.json`, GPS Ground Truthing Notes 2025 - RD.pdf
 **QGIS files:** `data/processed/aoi_qgis/` (all WGS84 / EPSG:4326)
 
@@ -25,7 +25,7 @@
 
 | # | AOI | Field Count | AOI Polygon | Detections | Detection Rate | Actionable? |
 |---|-----|-------------|-------------|------------|----------------|-------------|
-| 1 | Caleta Tiny Island | 321 | Yes (LiDAR-derived) | 315 | 0.98 | Yes |
+| 1 | Caleta Tiny Island | 321 | Yes (LiDAR-derived) | 329 | 1.02 | Yes |
 | 2 | Caleta Small Island | 1,557 | Yes (LiDAR-derived) | ~1,260 | ~0.81 | Yes |
 | 3 | Caleta Box 1 | 8 | **No** | — | — | No |
 | 4 | Caleta Box 2 | 12 | **No** | — | — | No |
@@ -47,17 +47,17 @@
 | Field | Value |
 |-------|-------|
 | Field count | 321 penguins |
-| AOI source | LiDAR footprint (grid occupancy + morphology + contour) |
-| Polygon area | 0.53 ha |
+| AOI source | LiDAR footprint (Otsu land core + 7m dilation constrained to data cells) |
+| Polygon area | 0.86 ha |
 | Reported area | 0.7 ha |
-| LiDAR detections | 315 inside AOI (340 total) |
-| Detection rate | 0.98 |
+| LiDAR detections | 329 inside AOI (340 total) |
+| Detection rate | 1.02 |
 | Sensor | DJI L2 |
 | GeoJSON (projected) | `data/processed/aoi_caleta_tiny_island_epsg32720.geojson` |
 | GeoJSON (WGS84) | `data/processed/aoi_qgis/caleta_tiny_island.geojson` |
 | Status | **Production-ready.** Best-performing site. |
 
-**Notes:** Island boundary is self-evident from LiDAR coverage. No GPS waypoints were provided for this site. The polygon area (0.53 ha) is smaller than the reported 0.7 ha; the morphological boundary method may clip some shoreline.
+**Notes:** Island boundary derived from LiDAR: Otsu threshold identifies the dense land core, then dilation expands to the shoreline constrained to cells with actual LiDAR returns (>=2 pts/cell). Previous polygon (0.53 ha) used aggressive morphological opening that clipped the shoreline. Updated polygon (0.86 ha) extends to the full sandy beach per client request. The 1.02 detection rate (329 vs 321) suggests a small number of false positives on the beach fringe — consistent with the 85-95% precision estimate from spectral analysis.
 
 ---
 
@@ -288,10 +288,10 @@ The following files have been superseded and should not be used:
 
 | AOI | Field | Detected | Rate | Notes |
 |-----|-------|----------|------|-------|
-| Caleta Tiny Island | 321 | 315 | 0.98 | Island boundary, open terrain |
+| Caleta Tiny Island | 321 | 329 | 1.02 | Full shoreline AOI, open terrain |
 | Caleta Small Island | 1,557 | ~1,260 | ~0.81 | Island boundary, mixed terrain |
 | San Lorenzo Road | 359 | 281 | 0.78 | GPS hull, road corridor |
-| **Subtotal** | **2,237** | **~1,856** | **~0.83** | |
+| **Subtotal** | **2,237** | **~1,870** | **~0.84** | |
 
 ### Tier 2 — Low confidence (boundary issues or heavy burrow occlusion)
 
