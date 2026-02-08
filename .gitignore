@@ -35,6 +35,7 @@ data/**
 !data/interim/.gitkeep
 !data/processed/
 !data/processed/.gitkeep
+!data/processed/*.tif
 
 # Large binary files (LiDAR point clouds, archives)
 *.las

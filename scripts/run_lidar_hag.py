@@ -723,7 +723,11 @@ def _write_geotiff(
             crs=crs,
             transform=transform,
             nodata=nodata,
-            compress="lzw",
+            compress="deflate",
+            predictor=3,
+            tiled=True,
+            blockxsize=256,
+            blockysize=256,
         ) as dst:
             dst.write(raster_flipped, 1)
 
@@ -832,7 +836,8 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
                      ground_method: str = "min",
                      quantile_lr: float = 0.05,
                      bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-                     count_grid: Optional[np.ndarray] = None) -> Tuple[np.ndarray, Dict]:
+                     count_grid: Optional[np.ndarray] = None,
+                     include_dsm: bool = False) -> Tuple[np.ndarray, Dict]:
     """Build a ground-surface DEM by streaming LAS points into a regular grid.
 
     Uses either per-cell minimum Z (``ground_method='min'``) or an online 5th
@@ -842,6 +847,9 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
 
     If *count_grid* is provided (pre-allocated int32 array of shape (ny, nx)),
     it is incremented per point during the streaming pass for density reporting.
+
+    If *include_dsm* is True, also tracks per-cell maximum Z (DSM) in the same
+    streaming pass and stores the result in ``meta["dsm"]``.
     """
     if bounds is None:
         mins, maxs, _ = read_bounds_and_counts(las_path, chunk_size)
@@ -851,6 +859,8 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
         maxs = np.array(maxs, dtype=float)
     ny, nx = _grid_shape(mins, maxs, cell_res)
     dem = np.full((ny, nx), np.inf, dtype=np.float32)
+    if include_dsm:
+        dsm = np.full((ny, nx), -np.inf, dtype=np.float32)
     # For percentile ground: maintain online q05 per cell
     if ground_method.lower() != "min":
         q05 = np.full((ny, nx), np.nan, dtype=np.float32)
@@ -869,7 +879,10 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
         flat = (iy * nx + ix)
         if flat.size:
             dem_flat = dem.ravel()
-            np.minimum.at(dem_flat, flat, z_valid.astype(np.float32))
+            z_f32 = z_valid.astype(np.float32)
+            np.minimum.at(dem_flat, flat, z_f32)
+            if include_dsm:
+                np.maximum.at(dsm.ravel(), flat, z_f32)
             if count_grid is not None:
                 np.add.at(count_grid.ravel(), flat, 1)
             if ground_method.lower() != "min":
@@ -877,7 +890,7 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
                 _online_quantile_update_indexed(
                     q05_flat,
                     flat,
-                    z_valid.astype(np.float32),
+                    z_f32,
                     p=0.05,
                     lr=quantile_lr,
                 )
@@ -904,6 +917,19 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
         # Fallback to dem where q05 is NaN
         ground = np.where(np.isnan(q05), dem, q05)
     meta = {"mins": mins.tolist(), "maxs": maxs.tolist(), "cell_res": cell_res, "shape": [int(ny), int(nx)]}
+
+    if include_dsm:
+        # Fill DSM gaps with NN interpolation (same approach as DTM)
+        neg_inf_mask = np.isinf(dsm) & (dsm < 0)
+        if neg_inf_mask.all():
+            dsm = np.full_like(dsm, float(global_min_z or 0.0))
+        elif neg_inf_mask.any():
+            finite_dsm = ~neg_inf_mask
+            if finite_dsm.any():
+                idx_dsm = ndi.distance_transform_edt(neg_inf_mask, return_distances=False, return_indices=True)
+                dsm = dsm[tuple(idx_dsm)]
+        meta["dsm"] = dsm.astype(np.float32)
+
     return ground.astype(np.float32), meta
 
 

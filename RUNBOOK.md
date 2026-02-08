@@ -683,6 +683,107 @@ python3 scripts/run_lidar_hag.py \
 
 ---
 
+## DTM Export for Thermal Analysis
+
+The LiDAR pipeline can export bare-earth DTM (Digital Terrain Model) GeoTIFFs for thermal orthorectification and georeferencing. Two paths are available:
+
+### Standalone DTM Export (single file, COG-compliant)
+
+Best for large individual LAS files. Produces a Cloud-Optimized GeoTIFF with DEFLATE compression:
+
+```bash
+source .venv/bin/activate
+
+python3 scripts/export_dtm.py \
+  "data/2025/Caleta Tiny Island/cloud0.las" \
+  -o data/processed/dtm_caleta_tiny_cloud0.tif \
+  --cell-res 0.25 --ground-method min --verbose
+```
+
+For TrueView 515 data (San Lorenzo), use the UTM-reprojected files:
+
+```bash
+python3 scripts/export_dtm.py \
+  "data/2025/San_Lorenzo_UTM/box_count_11.9.las" \
+  -o data/processed/dtm_san_lorenzo_11.9.tif \
+  --cell-res 0.30 --ground-method min --verbose
+```
+
+### DTM + DSM in One Pass
+
+Add `--also-dsm` to also produce a DSM (max Z per cell, top surface including vegetation) alongside the DTM. Both are built in a single streaming pass:
+
+```bash
+python3 scripts/export_dtm.py \
+  "data/2025/San Lorenzo Full LiDAR LAS.las" \
+  -o data/processed/san_lorenzo_full_dtm.tif \
+  --also-dsm --cell-res 0.30 --ground-method min --verbose
+```
+
+Output: `san_lorenzo_full_dtm.tif` + `san_lorenzo_full_dsm.tif` (auto-named).
+
+To reproject from native POSGAR (EPSG:5345) to UTM 20S:
+
+```bash
+gdalwarp -t_srs EPSG:32720 -co COMPRESS=DEFLATE -co PREDICTOR=3 \
+  -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 \
+  data/processed/san_lorenzo_full_dtm.tif \
+  data/processed/san_lorenzo_full_dtm_utm.tif
+
+gdalwarp -t_srs EPSG:32720 -co COMPRESS=DEFLATE -co PREDICTOR=3 \
+  -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 \
+  data/processed/san_lorenzo_full_dsm.tif \
+  data/processed/san_lorenzo_full_dsm_utm.tif
+```
+
+### Batch DTM Export (during detection run)
+
+Add `--emit-dtm` to any `run_lidar_hag.py` invocation to write a `_dtm.tif` alongside each tile's detection output:
+
+```bash
+python3 scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/caleta_tiny.json \
+  --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --dedupe-radius-m 0.5 --crs-epsg 32720 \
+  --top-method max --skip-copc \
+  --emit-dtm
+```
+
+Per-tile DTM files are written to the same directory as plot outputs (default: `data/interim/lidar_hag_plots/`).
+
+### Multi-tile DTM Merge
+
+For multi-tile sites (e.g., Caleta Small with 17 tiles), merge per-tile DTMs into a single raster using GDAL:
+
+```bash
+# 1. Build a virtual mosaic (instant, no data copying)
+gdalbuildvrt data/processed/dtm_caleta_tiny_merged.vrt \
+  data/interim/lidar_hag_plots/*_dtm.tif
+
+# 2. Materialize as a single COG
+gdal_translate -of GTiff \
+  -co COMPRESS=DEFLATE -co PREDICTOR=3 \
+  -co TILED=YES -co BLOCKXSIZE=256 -co BLOCKYSIZE=256 \
+  data/processed/dtm_caleta_tiny_merged.vrt \
+  data/processed/dtm_caleta_tiny_merged.tif
+```
+
+**Verify output:**
+```bash
+python3 -c "
+import rasterio
+with rasterio.open('data/processed/dtm_caleta_tiny_merged.tif') as ds:
+    print(f'CRS: {ds.crs}')
+    print(f'Size: {ds.width}x{ds.height}')
+    print(f'Bounds: {ds.bounds}')
+    print(f'Resolution: {ds.res}')
+"
+```
+
+---
+
 ## Not Yet Implemented
 
 These commands are planned but don't work yet:
