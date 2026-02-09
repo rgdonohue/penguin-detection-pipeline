@@ -1,0 +1,129 @@
+San Lorenzo Full Survey — DTM & DSM Surface Products
+=====================================================
+
+Generated: 2026-02-06
+Source:    data/2025/San Lorenzo Full LiDAR LAS.las (23 GB, TrueView 515)
+Site:      Estancia San Lorenzo, Chubut Province, Argentina
+Center:    42d05'11"S, 63d52'10"W
+
+
+Files
+-----
+
+  san_lorenzo_full_dtm.tif       DTM (bare earth), POSGAR CRS    15.6 MB
+  san_lorenzo_full_dsm.tif       DSM (top surface), POSGAR CRS   16.5 MB
+  san_lorenzo_full_dtm_utm.tif   DTM (bare earth), UTM CRS       15.7 MB
+  san_lorenzo_full_dsm_utm.tif   DSM (top surface), UTM CRS      16.6 MB
+
+
+Surface Definitions
+-------------------
+
+  DTM (Digital Terrain Model):  Bare earth surface. Per-cell minimum Z from
+      all LiDAR returns. No-data cells filled via nearest-neighbor
+      interpolation. Use this for georeferencing ground-level detections.
+
+  DSM (Digital Surface Model):  Top surface including vegetation, structures,
+      and any above-ground objects. Per-cell maximum Z from all LiDAR returns.
+      No-data cells filled via nearest-neighbor interpolation. Use this for
+      orthorectifying imagery where above-ground relief displacement matters.
+
+
+Coordinate Reference Systems
+-----------------------------
+
+  POSGAR files (*_dtm.tif, *_dsm.tif):
+      EPSG:5345 — POSGAR 2007 / Argentina Zone 3
+      Native CRS of the TrueView 515 sensor data.
+      Transverse Mercator, central meridian -66, false easting 3500000 m.
+
+  UTM files (*_dtm_utm.tif, *_dsm_utm.tif):
+      EPSG:32720 — WGS 84 / UTM Zone 20S
+      Project standard CRS. Reprojected from POSGAR via gdalwarp.
+
+  Both CRS use metres. The POSGAR-to-WGS84 transformation uses identity
+  parameters (zero offsets/rotations), so the two projections differ only
+  in grid origin and scale factor, not datum.
+
+
+Raster Properties
+-----------------
+
+  POSGAR grids:   3354 x 3211 pixels
+  UTM grids:      3465 x 3327 pixels (slightly larger due to reprojection)
+  Cell size:      0.30 m
+  Data type:      Float32 (elevation in metres)
+  Compression:    DEFLATE with float predictor
+  Tiling:         256 x 256 pixel blocks (COG-compliant)
+  No-data:        None (all cells filled via NN interpolation)
+  Coverage:       ~1039 m (E-W) x 997 m (N-S)
+
+  Bounding box (UTM):
+      Upper-left:   427583.02 E, 5340758.56 N
+      Lower-right:  428621.77 E, 5339761.18 N
+
+  Elevation statistics (UTM):
+                    DTM               DSM
+      Minimum:      0.00 m            0.00 m
+      Maximum:     31.56 m           67.81 m
+      Mean:        19.03 m           19.37 m
+      Std dev:      7.06 m            7.17 m
+
+  The DSM maximum (67.81 m) reflects tall trees/cliffs. In penguin habitat
+  areas where bushes are 0.3-0.5 m, DTM and DSM are nearly identical.
+
+
+Production Process
+------------------
+
+  1. Streaming point cloud read
+     The source LAS file (23 GB, ~hundreds of millions of points) is read
+     in chunks of 4 million points using laspy. Each chunk's XY coordinates
+     are binned into a regular 0.30 m grid.
+
+  2. DTM computation (min Z per cell)
+     For each grid cell, the minimum Z value across all LiDAR returns is
+     retained. This approximates the bare earth surface by selecting the
+     lowest return in each cell (ground_method="min").
+
+  3. DSM computation (max Z per cell)
+     Simultaneously, the maximum Z value per cell is tracked. This captures
+     the highest return — treetops, bush canopy, structures, or ground where
+     no vegetation exists.
+
+  4. Gap filling
+     Cells with no LiDAR returns (e.g., water, deep shadow) are filled
+     using nearest-neighbor interpolation via scipy's distance_transform_edt.
+
+  5. GeoTIFF export
+     Grids are written as Cloud-Optimized GeoTIFF (DEFLATE compression,
+     float predictor, 256x256 tiling) with CRS metadata from the LAS header.
+
+  6. CRS reprojection
+     POSGAR files are reprojected to UTM 20S using gdalwarp with bilinear
+     resampling (GDAL default for continuous-valued rasters).
+
+  Steps 1-5 are performed in a single streaming pass by:
+      scripts/export_dtm.py --also-dsm
+
+  Step 6 uses GDAL:
+      gdalwarp -t_srs EPSG:32720 <input> <output>
+
+  The DTM/DSM computation is implemented in:
+      scripts/run_lidar_hag.py :: build_ground_dem(include_dsm=True)
+
+
+Recommended Use
+---------------
+
+  For thermal orthorectification:  Use the *_dsm_utm.tif file. The DSM
+      accounts for above-ground relief displacement in oblique imagery.
+
+  For georeferencing point detections:  Use the *_dtm_utm.tif file.
+      Penguin detections are ground-level features.
+
+  For software expecting POSGAR coordinates:  Use the non-UTM variants.
+
+  Note: At San Lorenzo's penguin habitat, the DTM/DSM difference is
+  typically < 0.5 m (low bushes), which is small relative to the ~2.4 m
+  georeferencing uncertainty from oblique thermal imagery at 35 m AGL.
