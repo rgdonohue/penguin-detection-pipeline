@@ -8,7 +8,7 @@
 
 ---
 
-## Executive Summary
+## Overview
 
 We extracted 16-bit radiometric temperatures from seven DJI H20T frames (≈30 m AGL) over a Magellanic penguin colony. Most frames show strong positive contrast for penguins—typically 8–11 °C warmer than surrounding terrain (≈3 σ)—while one low-SNR frame (0356) exhibits only 0.14 °C contrast (0.05 σ). Automated per-penguin detection remains unreliable (best F1 ≈ 0.30), but the thermal layer is valuable for validating LiDAR detections and documenting colony activity.
 
@@ -80,18 +80,9 @@ Enhanced preprocessing reduces false positives (especially for high-contrast fra
 
 ## Scientific Value and Applications
 
-### Research Contributions
-1. **Initial quantitative measurements** of Magellanic penguin thermal signatures under spring breeding conditions
-2. **Detection baseline** for H20T sensor performance on resting penguins at one colony site
-3. **Reproducible methodology** for thermal data extraction and analysis
-4. **Foundation for expanded study** across seasons, weather conditions, and activity states
+This investigation provides initial quantitative measurements of Magellanic penguin thermal signatures under spring breeding conditions, establishes a detection baseline for the H20T sensor on resting penguins, and documents a reproducible methodology for radiometric data extraction.
 
-### Operational Applications
-While individual penguin identification remains challenging with current sensors, thermal imaging provides value for:
-- Colony extent mapping and density estimation
-- Behavioral pattern documentation (clustering, movement)
-- Multi-sensor validation when combined with LiDAR
-- Long-term archive for analysis with future sensor improvements
+Individual penguin identification remains challenging with current sensors, but thermal imaging provides value for colony extent mapping, behavioural documentation, multi-sensor validation alongside LiDAR, and long-term archiving for analysis with future sensor improvements.
 
 ---
 
@@ -208,5 +199,4 @@ This expanded sampling may reveal conditions where thermal detection becomes via
 
 ---
 
-*For complete system documentation, see PENGUIN_DETECTION_PIPELINE_PROJECT_SUMMARY.md*  
 *For field requirements, see FIELD_DATA_SPECIFICATIONS.md*

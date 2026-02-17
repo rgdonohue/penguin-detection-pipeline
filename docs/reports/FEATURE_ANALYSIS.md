@@ -2,9 +2,7 @@
 
 Date: 2026-02-02
 
-## Purpose
-
-Assess whether LiDAR point cloud features beyond geometric filtering can discriminate penguins from false positives. The pipeline currently accepts detections based on height (0.28–0.48 m HAG) and size (0.19–3.75 m², DJI L2 Caleta parameters at 0.25 m cell with min_area=3 and max_area=60) only. This analysis tests whether RGB color, NIR intensity, and derived indices add discriminative signal.
+The pipeline filters detections on height (0.28–0.48 m HAG) and size (0.19–3.75 m²) alone. This analysis tests whether RGB colour, NIR intensity, and derived indices add discriminative signal that could separate penguins from false positives.
 
 ## Method
 
@@ -46,7 +44,7 @@ HAG, area, circularity, and solidity show **no difference** between inside-AOI a
 
 At Caleta Tiny Island, 272/315 (86%) of inside-AOI detections form a tight core with no outlier flags in any feature. The 8 multi-flag outliers (anomalous in ≥2 features simultaneously) are the strongest false positive candidates; two have intensity below 5,000.
 
-This level of homogeneity is consistent with a high-precision detection set where most candidates are the same type of object (penguins). Confirmation requires manual labeling (sample bundle generated; see below).
+This level of homogeneity indicates a high-precision detection set — most candidates are the same type of object. Confirmation requires manual labelling (sample bundle generated; see below).
 
 ### 5. Cross-Sensor Comparison (DJI L2 vs TrueView 515)
 
@@ -58,7 +56,7 @@ San Lorenzo (TrueView 515) detections were extracted from a single box-count til
 
 **San Lorenzo has wider feature spreads.** All features (intensity, RGB, greenness) show broader distributions at San Lorenzo, consistent with higher false positive contamination in an environment with more diverse ground cover (vegetation, rock, bare soil) compared to the simpler island topography at Caleta.
 
-**Multi-return fraction is low on average but has a non-trivial tail.** TrueView 515 supports multi-return; the median multi-return fraction per detection is 0% and the mean is 0.6%, but 18.4% of detections exceed 1% and the maximum is ~10%. DJI L2 is single-return only. The low central tendency and high zero-inflation make this feature a weak discriminator overall, though the tail warrants investigation after labels are available.
+**Multi-return fraction is mostly zero but has a tail.** TrueView 515 supports multi-return; the median per-detection fraction is 0% and the mean is 0.6%, but 18.4% of detections exceed 1% (max ~10%). DJI L2 is single-return only. The zero-inflated distribution makes this a weak discriminator, though the tail warrants investigation after labels are available.
 
 ## Parameter Sensitivity
 
@@ -94,18 +92,18 @@ San Lorenzo shows the same pattern: hag_max is the dominant parameter. But the o
 | Greenness index | Moderate | Good — consistent near-zero signature | Good — similar distributions across sensors |
 | Color warmth (R−B) | Moderate | Unknown — needs more sites | Unknown |
 | RGB brightness | Weak | Poor — highly flight-dependent | Poor — sensor-dependent |
-| Multi-return fraction | None (DJI L2 single-return) | N/A | Weak — median 0%, mean <1% on TrueView 515; 18% of detections >1% |
+| Multi-return fraction | None (DJI L2 is single-return) | N/A | Weak — median 0%, mean <1% on TrueView 515 |
 | Morphological (HAG, area, shape) | None | N/A — pre-filtered by pipeline | N/A |
 
 ## Implications
 
-1. **For the client question "how do we know these are penguins?"** — The feature analysis shows that inside-AOI detections have a remarkably consistent spectral signature (tight intensity, warm RGB, near-zero greenness). This consistency is not guaranteed by the pipeline's geometric filters; it provides supporting evidence that the detections represent a single object class. However, this comparison is between inside-AOI (a TP/FP mix) and outside-AOI (presumed non-penguins) — confirmation that the inside-AOI core consists of true penguins requires manual labeling, which is in progress.
+1. **Inside-AOI detections have a consistent spectral signature** — tight intensity, warm RGB, near-zero greenness — that the pipeline's geometric filters do not impose. This supports the interpretation that detections represent a single object class. Confirmation requires manual labelling (in progress).
 
-2. **A per-site anomaly detector is feasible.** Flagging detections that are outliers in intensity, greenness, or color could identify likely false positives without labeled training data. This would not replace manual precision auditing, but could prioritize candidates for review.
+2. **Per-site anomaly detection is feasible.** Flagging outliers in intensity, greenness, or colour would identify likely false positives without labelled training data. This would not replace a precision audit, but could prioritise candidates for review.
 
-3. **A cross-site classifier would need normalization.** Raw feature values differ substantially between sites. Relative features (greenness, color ratios) transfer better than absolute values (intensity, brightness).
+3. **Cross-site classification would need normalisation.** Raw feature values differ between sites. Relative features (greenness, colour ratios) transfer better than absolute values (intensity, brightness).
 
-4. **Return count has limited utility.** The DJI L2 was flown in single-return mode (uninformative). TrueView 515 has multi-return capability, but the median per-detection multi-return fraction is 0% (mean 0.6%). An 18% tail exceeding 1% may correlate with vegetation or other non-penguin features — worth revisiting after labels are available.
+4. **Return count has limited utility.** DJI L2 is single-return. TrueView 515 has multi-return capability, but the median per-detection multi-return fraction is 0%. The 18% tail exceeding 1% may correlate with vegetation — worth revisiting after labels are available.
 
 ## Outputs
 

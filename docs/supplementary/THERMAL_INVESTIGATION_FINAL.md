@@ -269,9 +269,8 @@ Script: `scripts/create_hotspot_overlay.py`
 - Thermal validation: `data/interim/thermal_validation/hotspot_overlay_reproducible.png`
 
 ### Documentation
-- Technical docs: `thermal_extraction_progress.md`
-- Investigation: `docs/THERMAL_CALIBRATION_INVESTIGATION.md`
-- Integration status: `docs/RADIOMETRIC_INTEGRATION.md`
+- Investigation: `docs/supplementary/THERMAL_CALIBRATION_INVESTIGATION.md`
+- Findings summary: `docs/THERMAL_FINDINGS_SUMMARY.md`
 
 ---
 

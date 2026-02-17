@@ -32,8 +32,10 @@
 | 5 | San Lorenzo Caves | 908 | Yes (GPS, 8 waypoints) | 263 | 0.29 | Qualified |
 | 6 | San Lorenzo Plains | 453 | Yes (GPS, 38 waypoints) | 86 | 0.19 | Qualified |
 | 7 | San Lorenzo Road | 359 | Yes (GPS, 34 waypoints) | 281 | 0.78 | Yes |
-| 8 | SL Box Caves | 32 | **No** | — | — | No |
-| 9 | SL Box Bushes | 55 | **Broken** | — | — | No |
+| 8 | SL Box Caves | 32 | Yes (GPS, 4 corners) | — | — | Qualified* |
+| 9 | SL Box Bushes | 55 | **No coordinates** | — | — | No |
+
+\* Caves box polygon is ~200 m² from GPS corners but PDF measurement shows ~10,000 m²; coords may be interior stakes.
 
 **Actionable** = polygon exists and detection rate is interpretable.
 **Qualified** = polygon exists but low detection rates (0.19–0.29) may reflect burrow occlusion, boundary error, or both.
@@ -172,12 +174,13 @@
 | Field | Value |
 |-------|-------|
 | Field count | 32 penguins (30 effective — 2 walked out between thermal and LiDAR passes) |
-| AOI source | **None** — no GPS corners in field notes |
-| Polygon area | Unknown |
-| Reported area | ~1.15 ha (from `san_lorenzo_analysis.json`) |
-| Status | **No geometry. Needs client coordinates or digitizing from satellite.** |
+| AOI source | 4 GPS corners from PDF p.4 (listed under "Box Count High Density Caves" heading) |
+| Polygon area | ~200 m² (computed from GPS corners) |
+| Reported area | ~1.0 ha (from PDF measurement: 9,997 m²) |
+| GeoJSON (WGS84) | `gps_aoi/data/layers/aoi_san_lorenzo_box_caves.geojson` |
+| Status | **Valid but area mismatch.** GPS corners produce ~200 m² vs ~10,000 m² from PDF measurement. Coords may be interior stakes, not full boundary. |
 
-**Notes:** The field notes reference this box count area with an area of ~11,540 m² but provide no corner coordinates. Cannot validate detections until boundary is obtained.
+**Notes:** The 4 GPS coordinates were previously misattributed to the Bushes box count (55 penguins). Re-examination of the PDF confirms they appear under the Caves heading. They fall within LiDAR tile 11.9 (Caves area), consistent with this attribution. The thermal penguin labels (`data/2025/thermal-penguin-labels/`) are from 4 H30T images orbiting this location.
 
 ---
 
@@ -186,13 +189,12 @@
 | Field | Value |
 |-------|-------|
 | Field count | 55 penguins |
-| AOI source | 4 GPS corners from PDF p. 4 |
-| Polygon area | ~200 m² (computed) |
-| Reported area | 3.80 ha |
-| GeoJSON (WGS84) | `data/processed/aoi_qgis/san_lorenzo_box_bushes.geojson` |
-| Status | **Broken.** Coordinates produce wrong polygon. |
+| AOI source | **None** — no GPS coordinates listed in PDF |
+| Polygon area | Unknown |
+| Reported area | ~3.8 ha (from PDF satellite measurement: 37,984 m²) |
+| Status | **No coordinates.** PDF shows only a satellite image with Google Maps measurement overlay. Awaiting client GPS corners. |
 
-**Notes:** The 4 GPS corners produce a ~200 m² polygon (0.02 ha) in LAS tile 11.9 (the Caves area). The Bushes area should be in tile 11.10 and cover ~3.8 ha. Possible explanations: (a) coordinates are mislabeled and belong to Caves, or (b) LAS tiles 11.9/11.10 are spatially swapped. The GeoJSON file is provided for inspection but the polygon is not usable for validation. Client clarification needed.
+**Notes:** The PDF's Bushes section shows 55 counted penguins with an area of ~3.8 ha but provides no GPS corner coordinates. The 4 coordinates previously assigned here actually belong to the Caves box (see #8 above). The Bushes area is in LiDAR tile 11.10.
 
 ---
 
@@ -205,18 +207,17 @@ Box 1 (8 penguins) appears to be spatially contained within Box 2 (12 penguins).
 **Status:** Pending client confirmation.
 **Impact:** 8 penguins (~0.2% of total).
 
-### Issue 2: Bushes box GPS in wrong tile
+### ~~Issue 2: Bushes box GPS in wrong tile~~ RESOLVED
 
-The 4 GPS corners for the Bushes box count fall in LAS tile 11.9 (Caves area) and produce a polygon 190x smaller than expected. Either the coordinates are mislabeled or tiles 11.9/11.10 are spatially swapped.
+The 4 GPS corners were listed under the Caves heading in the PDF, not Bushes. They correctly fall in tile 11.9 (Caves). The Bushes box has no coordinates at all. Corrected in code and AOI files (2026-02-06).
 
-**Status:** Pending client clarification.
-**Impact:** 55 penguins (1.5% of total) unvalidatable.
+**Status:** Resolved.
 
-### Issue 3: Caves box count has no corners
+### ~~Issue 3: Caves box count has no corners~~ RESOLVED
 
-32 penguins counted but no GPS corner coordinates provided in field notes.
+The Caves box does have 4 GPS corners from PDF p.4. They were previously misattributed to Bushes. Now correctly assigned. However, the polygon they produce (~200 m²) is much smaller than the PDF measurement (~10,000 m²).
 
-**Status:** Pending client input.
+**Status:** Resolved (attribution corrected). Area mismatch remains — client clarification needed on what the 4 coords represent.
 **Impact:** 32 penguins (<1% of total) unvalidatable.
 
 ### Issue 4: Plains area mismatch
@@ -267,7 +268,7 @@ All files in `data/processed/aoi_qgis/`:
 | `data/processed/san_lorenzo_analysis.json` | Field counts and density by site |
 | `data/processed/san_lorenzo_waypoints.csv` | 48 GPS waypoints (raw) |
 | `gps_aoi/data/waypoints/san_lorenzo_road_waypoints.geojson` | Road waypoint source points |
-| `notes/client_aoi_clarifications.md` | Full issue descriptions for client email |
+| `docs/reports/CLIENT_STATUS_REPORT_2026-02-02.md` | AOI clarification questions inline |
 
 ---
 

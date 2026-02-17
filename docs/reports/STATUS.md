@@ -6,7 +6,7 @@ Last updated: 2026-02-02 UTC
 
 ---
 
-## ✅ What Actually Works
+## Working Components
 
 ### 1. LiDAR Detection Pipeline
 **Status:** RUNS SUCCESSFULLY; VALIDATION IN PROGRESS (FEATURE ANALYSIS COMPLETE, MANUAL LABELING IN PROGRESS)
@@ -32,7 +32,7 @@ Last updated: 2026-02-02 UTC
 - **Manual labeling in progress** — precision estimation via `scripts/estimate_precision.py` will follow
 - See `docs/reports/FEATURE_ANALYSIS.md` for full analysis
 
-**VALIDATION CAVEATS (see `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md`):**
+**VALIDATION CAVEATS:**
 - Previous "+6% / +1% error" claims were based on box count comparisons where tile extents ≠ counted areas
 - Top-surface estimator (`p95`) is an approximate streaming quantile sensitive to order/chunking
 - Detection semantics are now explicitly encoded as **candidates (blob centroids), not guaranteed individuals** (see `pipelines/contracts.py`)
@@ -84,7 +84,7 @@ Last updated: 2026-02-02 UTC
 
 ---
 
-## ❌ What Doesn't Work
+## What Doesn't Work
 
 ### 1. Fusion Pipeline
 **Status:** PARTIALLY COMPLETE
@@ -125,7 +125,7 @@ Last updated: 2026-02-02 UTC
 
 ---
 
-## 📊 Component Maturity Summary
+## Component Maturity Summary
 
 | Component | Status | Confidence | Blocker |
 |-----------|--------|------------|---------|
@@ -143,9 +143,9 @@ Last updated: 2026-02-02 UTC
 
 ---
 
-## 🎯 Critical Path
+## Critical Path
 
-## ✅ Readiness Framing (QC vs Scientific)
+## Readiness Framing (QC vs Scientific)
 
 This repo tracks two kinds of progress:
 
@@ -183,24 +183,21 @@ Policy: `docs/process/WORKSTREAMS_QC_VS_SCIENCE.md`
 
 ---
 
-## 📁 Key Files Reference
+## Key Files Reference
 
 | Purpose | File |
 |---------|------|
-| Product requirements | `PRD.md` |
 | Tested commands | `RUNBOOK.md` |
 | Task tracking | `notes/pipeline_todo.md` |
-| Argentina tuning | `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md` |
 | This status | `docs/reports/STATUS.md` |
-| LiDAR honest assessment | `docs/reports/LIDAR_ASSESSMENT_2025-12-21.md` |
+| LiDAR assessment | `docs/reports/LIDAR_ASSESSMENT_2026-01.md` |
 | Feature analysis | `docs/reports/FEATURE_ANALYSIS.md` |
 | Labeling protocol | `docs/process/LABELING_PROTOCOL.md` |
-| Detailed review | `docs/reports/PROJECT_STATUS_REVIEW_2025-12-17.md` |
 | Tile overlap evidence | `data/interim/tile_overlap_analysis.json` |
 
 ---
 
-## ✅ Argentina LiDAR Parameters (Working, Pending Validation)
+## Argentina LiDAR Parameters (Working, Pending Validation)
 
 ### DJI L2 (Caleta sites)
 ```bash
@@ -238,4 +235,4 @@ After test suite is fixed and fusion pipeline is implemented.
 
 ---
 
-*For detailed fact-checked analysis, see `docs/reports/PROJECT_STATUS_REVIEW_2025-12-17.md`*
+*For detection results, see `docs/reports/CLIENT_STATUS_REPORT_2026-02-02.md`*

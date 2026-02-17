@@ -628,7 +628,7 @@ Magellanic penguins evolved exceptional insulation for survival in harsh coastal
 4. `scripts/run_lidar_hag.py` - LiDAR processing pipeline
 5. `tests/test_golden_aoi.py` - Validation test suite (12 tests)
 6. `data/legacy_ro/thermal-lidar-fusion/research/` - Multi-sensor deployment research
-7. External review: `docs/THERMAL_INVESTIGATION_REVIEW.md` - Peer review findings
+7. Thermal conclusions: `docs/supplementary/THERMAL_INVESTIGATION_FINAL.md` - Final thermal report
 
 ---
 

@@ -56,7 +56,7 @@ We've been working from the GPS coordinates and annotated map screenshots in the
 
 We also noticed that LiDAR tiles `box_count_11.9` and `box_count_11.10` appear spatially swapped relative to the site zone names — 11.9 covers the Plains area and 11.10 covers Caves. Can you confirm which is which?
 
-Detailed notes: `notes/client_aoi_clarifications.md`
+Detailed notes are maintained internally in the GPS/AOI tools under `gps_aoi/`.
 
 ## What's Delivered
 

@@ -42,7 +42,7 @@ This document presents data requirements for the penguin detection pipeline base
 
 ### Performance Characteristics from Test Data
 
-Analysis of test data established clear relationships between data quality and detection success. Pipeline produces hundreds of candidate detections per tile (802 with optimized parameters on test tile), with detection counts consistent with field observations of colony density.
+Analysis of test data established clear relationships between data quality and detection success. Pipeline produces hundreds of candidate detections per tile (776 with optimized parameters on test tile), with detection counts consistent with field observations of colony density.
 
 **Point Density Context**:
 
@@ -231,5 +231,4 @@ Data transfer arrangements flexible based on team preferences (physical drives, 
 
 ---
 
-*For complete system documentation, see PENGUIN_DETECTION_PIPELINE_PROJECT_SUMMARY.md*
 *For thermal investigation details, see THERMAL_FINDINGS_SUMMARY.md*

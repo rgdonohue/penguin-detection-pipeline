@@ -71,7 +71,7 @@ Box area: ~193 m^2. The LiDAR tile covers a much larger area (2.79 ha) containin
 
 **Script:** `scripts/georeference_thermal_labels.py`
 **Output:** `data/processed/thermal_labels_georef.json`
-**Session notes:** `docs/reports/SESSION_2026-01-30_THERMAL_LABEL_GEOREF.md`
+**Method:** Homography-based georeferencing from box corner GCPs (4 H30T images).
 
 ## Process 2: Spatial Cross-Reference (LiDAR vs Thermal GT)
 

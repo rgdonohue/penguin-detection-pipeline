@@ -406,7 +406,7 @@ python3 scripts/run_lidar_hag.py \
 **Data Catalogue:**
 - Location: `data/2025/lidar_catalogue_full.json`
 - Total: 24 source LAS files, ~762M points, ~25.5 GB (plus COPC/UTM copies)
-- Session report: `docs/reports/SESSION_2025-12-10_LIDAR_TUNING.md`
+- Methodology: `docs/reports/LIDAR_METHODOLOGY.md`
 
 ---
 
@@ -1038,7 +1038,7 @@ source .venv/bin/activate
 
 ## Contact / Support
 
-See PRD.md for project requirements.
+See CLAUDE.md for project specifications.
 See STATUS.md for current implementation state.
 
 ---

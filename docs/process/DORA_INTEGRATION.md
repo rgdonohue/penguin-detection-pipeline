@@ -26,7 +26,7 @@ How this penguin pipeline embodies DORA best practices for AI-assisted solo deve
 **DORA:** Wire AI into codebase with proper context.
 
 **We do:**
-- `PRD.md` - Single source of truth for requirements
+- `CLAUDE.md` - Single source of truth for project specifications
 - `RUNBOOK.md` - Authoritative commands
 - `manifests/harvest_notes.md` - Searchable legacy findings
 
