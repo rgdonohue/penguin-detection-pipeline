@@ -30,6 +30,36 @@ def main() -> int:
     parser.add_argument("--thermal-summary", type=Path, required=True, help="Thermal detections summary JSON path")
     parser.add_argument("--out", type=Path, required=True, help="Output fusion rollup JSON path")
     parser.add_argument("--match-radius-m", type=float, default=0.5, help="Matching radius in meters (default: 0.5)")
+    parser.add_argument(
+        "--thermal-raster",
+        type=Path,
+        default=None,
+        help="Optional thermal raster (GeoTIFF) for window sampling at LiDAR candidate points.",
+    )
+    parser.add_argument(
+        "--thermal-core-radius-m",
+        type=float,
+        default=0.5,
+        help="Core radius (m) for thermal mean/max sampling.",
+    )
+    parser.add_argument(
+        "--thermal-neighborhood-inner-radius-m",
+        type=float,
+        default=1.0,
+        help="Inner radius (m) for local thermal background annulus.",
+    )
+    parser.add_argument(
+        "--thermal-neighborhood-outer-radius-m",
+        type=float,
+        default=2.0,
+        help="Outer radius (m) for local thermal background annulus.",
+    )
+    parser.add_argument(
+        "--thermal-z-method",
+        choices=["robust", "standard"],
+        default="robust",
+        help="Local z-score method: robust (median/MAD) or standard (mean/std).",
+    )
     args = parser.parse_args()
 
     run(
@@ -38,6 +68,11 @@ def main() -> int:
             thermal_summary=args.thermal_summary,
             out_path=args.out,
             match_radius_m=float(args.match_radius_m),
+            thermal_raster=args.thermal_raster,
+            thermal_core_radius_m=float(args.thermal_core_radius_m),
+            thermal_neighborhood_inner_radius_m=float(args.thermal_neighborhood_inner_radius_m),
+            thermal_neighborhood_outer_radius_m=float(args.thermal_neighborhood_outer_radius_m),
+            thermal_z_method=str(args.thermal_z_method),
         )
     )
     return 0

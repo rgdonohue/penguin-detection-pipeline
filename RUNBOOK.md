@@ -143,6 +143,15 @@ python3 scripts/run_lidar_hag.py \
 
 **Production policy:** do not use `--allow-unknown-crs` or `--skip-oversized-tiles` for final counts.
 
+Official one-command path (gated):
+
+```bash
+make official-run \
+  OFFICIAL_DATA_ROOT="data/2025/Caleta Tiny Island" \
+  OFFICIAL_AOI_ID=caleta_tiny_island \
+  OFFICIAL_AOI_GEOJSON=data/processed/aoi_caleta_tiny_island_epsg32720.geojson
+```
+
 **Expected output:**
 ```json
 {
@@ -298,6 +307,8 @@ python scripts/estimate_precision.py \
 ### 1b9. Labeled-Subset Validation + Parameter Sweep
 
 Score LiDAR detections against a labeled subset with one-to-one radius matching (TP/FP/FN, precision/recall/F1), optionally clipping to AOI and running a sweep.
+
+Interpretation guardrail: these are **subset QA** metrics, not site-wide accuracy or full census metrics. Use `docs/VALIDATION_PROTOCOL.md` for the stratified audit workflow.
 
 ```bash
 source .venv/bin/activate
@@ -1055,15 +1066,33 @@ rm -rf data/interim/*
 #   --out-dir data/processed/thermal
 ```
 
-### When Fusion Script Exists
+### Fusion Join + Thermal Sampling
 
 ```bash
-# Tested via unit tests (synthetic inputs); requires CRS `x/y` in both summaries.
+# Spatial join only
 python scripts/run_fusion_join.py \
   --lidar-summary path/to/lidar_summary.json \
   --thermal-summary path/to/thermal_summary.json \
   --out data/interim/fusion_rollup.json \
   --match-radius-m 0.5
+
+# Spatial join + thermal raster sampling at LiDAR candidates
+python scripts/run_fusion_join.py \
+  --lidar-summary path/to/lidar_summary.json \
+  --thermal-summary path/to/thermal_summary.json \
+  --thermal-raster path/to/thermal_utm.tif \
+  --thermal-core-radius-m 0.5 \
+  --thermal-neighborhood-inner-radius-m 1.0 \
+  --thermal-neighborhood-outer-radius-m 2.0 \
+  --thermal-z-method robust \
+  --out data/interim/fusion_rollup_sampled.json \
+  --match-radius-m 0.5
+
+# Make target wrapper
+make fusion-sample \
+  FUSION_LIDAR_SUMMARY=path/to/lidar_summary.json \
+  FUSION_THERMAL_SUMMARY=path/to/thermal_summary.json \
+  FUSION_THERMAL_RASTER=path/to/thermal_utm.tif
 ```
 
 ---

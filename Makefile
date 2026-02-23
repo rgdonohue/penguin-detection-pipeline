@@ -1,7 +1,7 @@
 # Penguin Detection Pipeline — Working Makefile
 # Principle: Only include targets that actually work
 
-.PHONY: help env validate test golden test-lidar thermal clean
+.PHONY: help env validate test golden test-lidar thermal official-run fusion-sample clean
 
 help:
 	@echo "Penguin Detection Pipeline — Available Targets"
@@ -14,13 +14,36 @@ help:
 	@echo "  make test         - Run golden AOI test suite"
 	@echo "  make golden       - Run golden AOI guardrail (QC harness)"
 	@echo "  make test-lidar   - Run LiDAR detection on sample data"
+	@echo "  make official-run - Run LiDAR in official reporting mode (gated)"
 	@echo "  make thermal      - Run H30T thermal smoke test on staged frames"
+	@echo "  make fusion-sample - Run fusion join + thermal window sampling"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove interim files"
 
 # Environment setup
 PYTHON ?= python3.12
+OFFICIAL_DATA_ROOT ?= data/2025/Caleta Tiny Island
+OFFICIAL_OUT ?= data/interim/official/lidar_official.json
+OFFICIAL_AOI_ID ?= caleta_tiny_island
+OFFICIAL_AOI_GEOJSON ?= data/processed/aoi_caleta_tiny_island_epsg32720.geojson
+OFFICIAL_CRS_EPSG ?= 32720
+OFFICIAL_DEDUPE_RADIUS_M ?= 0.5
+OFFICIAL_CELL_RES ?= 0.25
+OFFICIAL_HAG_MIN ?= 0.28
+OFFICIAL_HAG_MAX ?= 0.48
+OFFICIAL_MIN_AREA ?= 3
+OFFICIAL_MAX_AREA ?= 60
+
+FUSION_LIDAR_SUMMARY ?= data/interim/official/lidar_official.json
+FUSION_THERMAL_SUMMARY ?= data/interim/thermal_smoketest.json
+FUSION_THERMAL_RASTER ?=
+FUSION_OUT ?= data/interim/fusion/fusion_rollup.json
+FUSION_MATCH_RADIUS_M ?= 0.5
+FUSION_CORE_RADIUS_M ?= 0.5
+FUSION_NEIGHBORHOOD_INNER_M ?= 1.0
+FUSION_NEIGHBORHOOD_OUTER_M ?= 2.0
+FUSION_Z_METHOD ?= robust
 
 env:
 	@echo "Setting up virtual environment..."
@@ -95,6 +118,74 @@ thermal:
 	@echo ""
 	@echo "✓ Thermal smoke test complete"
 	@echo "  Summary: data/interim/thermal_smoketest.json"
+
+official-run:
+	@echo "Running LiDAR official reporting mode..."
+	@if [ ! -x ".venv/bin/python" ]; then \
+		echo "Missing .venv. Run: make env"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(OFFICIAL_DATA_ROOT)" ]; then \
+		echo "Missing OFFICIAL_DATA_ROOT: $(OFFICIAL_DATA_ROOT)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(OFFICIAL_AOI_GEOJSON)" ]; then \
+		echo "Missing OFFICIAL_AOI_GEOJSON: $(OFFICIAL_AOI_GEOJSON)"; \
+		exit 1; \
+	fi
+	@mkdir -p "$$(dirname "$(OFFICIAL_OUT)")"
+	@MPLCONFIGDIR="data/interim/mplconfig" .venv/bin/python scripts/run_lidar_hag.py \
+		--data-root "$(OFFICIAL_DATA_ROOT)" \
+		--out "$(OFFICIAL_OUT)" \
+		--cell-res "$(OFFICIAL_CELL_RES)" \
+		--hag-min "$(OFFICIAL_HAG_MIN)" --hag-max "$(OFFICIAL_HAG_MAX)" \
+		--min-area-cells "$(OFFICIAL_MIN_AREA)" --max-area-cells "$(OFFICIAL_MAX_AREA)" \
+		--crs-epsg "$(OFFICIAL_CRS_EPSG)" \
+		--dedupe-radius-m "$(OFFICIAL_DEDUPE_RADIUS_M)" \
+		--aoi-id "$(OFFICIAL_AOI_ID)" \
+		--aoi-registry manifests/aoi_registry.json \
+		--aoi-geojson "$(OFFICIAL_AOI_GEOJSON)" \
+		--official-reporting \
+		--strict-outputs
+	@echo "✓ Official run complete"
+	@echo "  Summary: $(OFFICIAL_OUT)"
+	@echo "  Manifest: $$(dirname "$(OFFICIAL_OUT)")/lidar_run_manifest.json"
+
+fusion-sample:
+	@echo "Running fusion sampling..."
+	@if [ ! -x ".venv/bin/python" ]; then \
+		echo "Missing .venv. Run: make env"; \
+		exit 1; \
+	fi
+	@if [ -z "$(FUSION_THERMAL_RASTER)" ]; then \
+		echo "Set FUSION_THERMAL_RASTER=/path/to/thermal.tif"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FUSION_LIDAR_SUMMARY)" ]; then \
+		echo "Missing FUSION_LIDAR_SUMMARY: $(FUSION_LIDAR_SUMMARY)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FUSION_THERMAL_SUMMARY)" ]; then \
+		echo "Missing FUSION_THERMAL_SUMMARY: $(FUSION_THERMAL_SUMMARY)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FUSION_THERMAL_RASTER)" ]; then \
+		echo "Missing FUSION_THERMAL_RASTER: $(FUSION_THERMAL_RASTER)"; \
+		exit 1; \
+	fi
+	@mkdir -p "$$(dirname "$(FUSION_OUT)")"
+	@.venv/bin/python scripts/run_fusion_join.py \
+		--lidar-summary "$(FUSION_LIDAR_SUMMARY)" \
+		--thermal-summary "$(FUSION_THERMAL_SUMMARY)" \
+		--out "$(FUSION_OUT)" \
+		--match-radius-m "$(FUSION_MATCH_RADIUS_M)" \
+		--thermal-raster "$(FUSION_THERMAL_RASTER)" \
+		--thermal-core-radius-m "$(FUSION_CORE_RADIUS_M)" \
+		--thermal-neighborhood-inner-radius-m "$(FUSION_NEIGHBORHOOD_INNER_M)" \
+		--thermal-neighborhood-outer-radius-m "$(FUSION_NEIGHBORHOOD_OUTER_M)" \
+		--thermal-z-method "$(FUSION_Z_METHOD)"
+	@echo "✓ Fusion sampling complete"
+	@echo "  Output: $(FUSION_OUT)"
 
 # Clean interim files
 clean:

@@ -10,6 +10,7 @@ produce thermal detections with ``x``/``y`` coordinates in the target CRS.
 from __future__ import annotations
 
 import json
+import math
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,11 @@ class FusionParams:
     out_path: Path
     match_radius_m: float = 0.5
     qc_panel: Optional[Path] = None
+    thermal_raster: Optional[Path] = None
+    thermal_core_radius_m: float = 0.5
+    thermal_neighborhood_inner_radius_m: float = 1.0
+    thermal_neighborhood_outer_radius_m: float = 2.0
+    thermal_z_method: str = "robust"
 
 
 def run(params: FusionParams) -> Path:
@@ -48,6 +54,18 @@ def run(params: FusionParams) -> Path:
     _validate_coordinate_range(lidar_dets, effective_crs)
     _validate_coordinate_range(thermal_dets, effective_crs)
 
+    thermal_sampling_meta: Optional[Dict[str, Any]] = None
+    if params.thermal_raster is not None:
+        thermal_sampling_meta = _sample_thermal_on_detections(
+            detections=lidar_dets,
+            thermal_raster=Path(params.thermal_raster),
+            expected_crs=effective_crs,
+            core_radius_m=float(params.thermal_core_radius_m),
+            neighborhood_inner_radius_m=float(params.thermal_neighborhood_inner_radius_m),
+            neighborhood_outer_radius_m=float(params.thermal_neighborhood_outer_radius_m),
+            z_method=str(params.thermal_z_method),
+        )
+
     out = _join_detections(
         lidar_dets=lidar_dets,
         thermal_dets=thermal_dets,
@@ -61,6 +79,8 @@ def run(params: FusionParams) -> Path:
     out["lidar_crs"] = lidar_crs
     out["thermal_crs"] = thermal_crs
     out["crs"] = lidar_crs or thermal_crs
+    if thermal_sampling_meta is not None:
+        out["thermal_sampling"] = thermal_sampling_meta
 
     params.out_path.parent.mkdir(parents=True, exist_ok=True)
     params.out_path.write_text(json.dumps(out, indent=2))
@@ -158,6 +178,255 @@ def _xy_from_dets(dets: List[Dict[str, Any]]) -> Tuple[np.ndarray, List[int]]:
     if not coords:
         return np.zeros((0, 2), dtype=np.float64), []
     return np.asarray(coords, dtype=np.float64), idxs
+
+
+def _normalize_crs_code(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+    upper = cleaned.upper()
+    if upper.startswith("EPSG:"):
+        tail = upper.split(":", 1)[1].strip()
+        if tail.isdigit():
+            return f"EPSG:{int(tail)}"
+    if cleaned.isdigit():
+        return f"EPSG:{int(cleaned)}"
+    return cleaned
+
+
+def _raster_crs_code(dataset: Any) -> Optional[str]:
+    crs = getattr(dataset, "crs", None)
+    if crs is None:
+        return None
+    try:
+        epsg = crs.to_epsg()
+    except Exception:
+        epsg = None
+    if epsg is not None:
+        return f"EPSG:{int(epsg)}"
+    try:
+        return str(crs.to_string())
+    except Exception:
+        text = str(crs)
+        return text if text.strip() else None
+
+
+def _valid_data_mask(values: np.ndarray, nodata: Optional[float]) -> np.ndarray:
+    valid = np.isfinite(values)
+    if nodata is None:
+        return valid
+    try:
+        nodata_f = float(nodata)
+    except (TypeError, ValueError):
+        return valid
+    if math.isnan(nodata_f):
+        return valid & ~np.isnan(values)
+    return valid & (values != nodata_f)
+
+
+def _sample_thermal_point(
+    *,
+    dataset: Any,
+    x: Optional[float],
+    y: Optional[float],
+    core_radius_m: float,
+    neighborhood_inner_radius_m: float,
+    neighborhood_outer_radius_m: float,
+    z_method: str,
+) -> Dict[str, Any]:
+    if x is None or y is None:
+        return {
+            "thermal_mean_c": None,
+            "thermal_max_c": None,
+            "thermal_z_local": None,
+            "thermal_sample_reason": "missing_xy",
+            "thermal_n_core": 0,
+            "thermal_n_neighborhood": 0,
+        }
+
+    row, col = dataset.index(float(x), float(y))
+    if row < 0 or row >= int(dataset.height) or col < 0 or col >= int(dataset.width):
+        return {
+            "thermal_mean_c": None,
+            "thermal_max_c": None,
+            "thermal_z_local": None,
+            "thermal_sample_reason": "point_outside_raster",
+            "thermal_n_core": 0,
+            "thermal_n_neighborhood": 0,
+        }
+
+    pixel_x = abs(float(dataset.transform.a))
+    pixel_y = abs(float(dataset.transform.e))
+    if pixel_x <= 0 or pixel_y <= 0:
+        raise ValueError("Thermal raster has invalid pixel size (non-positive).")
+    max_radius_px = int(math.ceil(float(neighborhood_outer_radius_m) / min(pixel_x, pixel_y)))
+    row_min = max(0, int(row - max_radius_px))
+    row_max = min(int(dataset.height), int(row + max_radius_px + 1))
+    col_min = max(0, int(col - max_radius_px))
+    col_max = min(int(dataset.width), int(col + max_radius_px + 1))
+
+    from rasterio.windows import Window
+
+    arr = dataset.read(
+        1,
+        window=Window(col_off=col_min, row_off=row_min, width=col_max - col_min, height=row_max - row_min),
+        masked=False,
+    ).astype(np.float64, copy=False)
+    if arr.size == 0:
+        return {
+            "thermal_mean_c": None,
+            "thermal_max_c": None,
+            "thermal_z_local": None,
+            "thermal_sample_reason": "point_outside_raster",
+            "thermal_n_core": 0,
+            "thermal_n_neighborhood": 0,
+        }
+
+    rows = np.arange(row_min, row_max, dtype=np.float64)
+    cols = np.arange(col_min, col_max, dtype=np.float64)
+    grid_cols, grid_rows = np.meshgrid(cols, rows)
+    t = dataset.transform
+    xs = t.c + (grid_cols + 0.5) * t.a + (grid_rows + 0.5) * t.b
+    ys = t.f + (grid_cols + 0.5) * t.d + (grid_rows + 0.5) * t.e
+    distances = np.hypot(xs - float(x), ys - float(y))
+
+    valid = _valid_data_mask(arr, dataset.nodata)
+    core_mask = distances <= float(core_radius_m)
+    neighborhood_mask = (
+        (distances >= float(neighborhood_inner_radius_m))
+        & (distances <= float(neighborhood_outer_radius_m))
+    )
+
+    core_values = arr[core_mask & valid]
+    if core_values.size == 0:
+        return {
+            "thermal_mean_c": None,
+            "thermal_max_c": None,
+            "thermal_z_local": None,
+            "thermal_sample_reason": "core_nodata",
+            "thermal_n_core": 0,
+            "thermal_n_neighborhood": int(np.count_nonzero(neighborhood_mask & valid)),
+        }
+
+    neighborhood_values = arr[neighborhood_mask & valid]
+    reason: Optional[str] = None
+    z_local: Optional[float] = None
+    if neighborhood_values.size < 3:
+        reason = "insufficient_neighborhood"
+    else:
+        if z_method == "robust":
+            core_signal = float(np.median(core_values))
+            neigh_med = float(np.median(neighborhood_values))
+            mad = float(np.median(np.abs(neighborhood_values - neigh_med)))
+            robust_scale = 1.4826 * mad
+            if robust_scale > 1e-9:
+                z_local = float((core_signal - neigh_med) / robust_scale)
+            else:
+                neigh_std = float(np.std(neighborhood_values))
+                if neigh_std > 1e-9:
+                    reason = "mad_zero_fallback_std"
+                    z_local = float((core_signal - float(np.mean(neighborhood_values))) / neigh_std)
+                else:
+                    reason = "zero_neighborhood_variance"
+        elif z_method == "standard":
+            core_signal = float(np.mean(core_values))
+            neigh_mean = float(np.mean(neighborhood_values))
+            neigh_std = float(np.std(neighborhood_values))
+            if neigh_std > 1e-9:
+                z_local = float((core_signal - neigh_mean) / neigh_std)
+            else:
+                reason = "zero_neighborhood_variance"
+        else:
+            raise ValueError(f"Unsupported thermal z method: {z_method}")
+
+    return {
+        "thermal_mean_c": float(np.mean(core_values)),
+        "thermal_max_c": float(np.max(core_values)),
+        "thermal_z_local": z_local,
+        "thermal_sample_reason": reason,
+        "thermal_n_core": int(core_values.size),
+        "thermal_n_neighborhood": int(neighborhood_values.size),
+    }
+
+
+def _sample_thermal_on_detections(
+    *,
+    detections: List[Dict[str, Any]],
+    thermal_raster: Path,
+    expected_crs: Optional[str],
+    core_radius_m: float,
+    neighborhood_inner_radius_m: float,
+    neighborhood_outer_radius_m: float,
+    z_method: str,
+) -> Dict[str, Any]:
+    if core_radius_m <= 0:
+        raise ValueError(f"thermal_core_radius_m must be > 0, got {core_radius_m}")
+    if neighborhood_inner_radius_m < core_radius_m:
+        raise ValueError(
+            "thermal_neighborhood_inner_radius_m must be >= thermal_core_radius_m"
+        )
+    if neighborhood_outer_radius_m <= neighborhood_inner_radius_m:
+        raise ValueError(
+            "thermal_neighborhood_outer_radius_m must be > thermal_neighborhood_inner_radius_m"
+        )
+    if expected_crs is None:
+        raise ValueError("Thermal sampling requires CRS on fusion detections.")
+
+    try:
+        import rasterio  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise RuntimeError("rasterio is required for thermal raster sampling.") from exc
+
+    raster_path = Path(thermal_raster)
+    if not raster_path.exists():
+        raise FileNotFoundError(f"Thermal raster not found: {raster_path}")
+
+    expected_norm = _normalize_crs_code(expected_crs)
+    if expected_norm is None:
+        raise ValueError(f"Unrecognized detection CRS: {expected_crs!r}")
+
+    sampled = 0
+    with rasterio.open(raster_path) as ds:
+        raster_crs = _raster_crs_code(ds)
+        raster_norm = _normalize_crs_code(raster_crs)
+        if raster_norm is None:
+            raise ValueError(f"Thermal raster CRS missing: {raster_path}")
+        if raster_norm != expected_norm:
+            raise ValueError(
+                f"CRS mismatch: detections={expected_norm} thermal_raster={raster_norm}"
+            )
+
+        for det in detections:
+            result = _sample_thermal_point(
+                dataset=ds,
+                x=det.get("x"),
+                y=det.get("y"),
+                core_radius_m=float(core_radius_m),
+                neighborhood_inner_radius_m=float(neighborhood_inner_radius_m),
+                neighborhood_outer_radius_m=float(neighborhood_outer_radius_m),
+                z_method=str(z_method),
+            )
+            det.update(result)
+            if result.get("thermal_mean_c") is not None:
+                sampled += 1
+
+    return {
+        "enabled": True,
+        "thermal_raster": str(raster_path),
+        "core_radius_m": float(core_radius_m),
+        "neighborhood_inner_radius_m": float(neighborhood_inner_radius_m),
+        "neighborhood_outer_radius_m": float(neighborhood_outer_radius_m),
+        "z_method": str(z_method),
+        "z_method_note": (
+            "robust uses median/MAD and falls back to mean/std when MAD is zero."
+            if str(z_method) == "robust"
+            else "standard uses mean/std and is more sensitive to outliers."
+        ),
+        "detections_total": int(len(detections)),
+        "detections_with_thermal_samples": int(sampled),
+    }
 
 
 def _join_detections(
