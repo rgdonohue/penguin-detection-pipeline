@@ -14,10 +14,11 @@ Designed to avoid loading all points in memory; baseline Python is 3.12.x (tests
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -48,8 +49,19 @@ from scipy.ndimage import percentile_filter
 from scipy.spatial import cKDTree
 from pipelines.utils.provenance import write_provenance, append_timings
 from pipelines.contracts import LIDAR_CANDIDATES_CONTRACT, LIDAR_CANDIDATES_PURPOSE
-from pipelines.lidar_profiles import as_policy_dict, SENSOR_PROFILES
+from pipelines.lidar_profiles import (
+    OFFICIAL_DETERMINISTIC,
+    SENSOR_PROFILES,
+    as_policy_dict,
+)
 from pipelines.blob_features import extract_blob_features, BlobFeatures
+from pipelines.official_reporting import (
+    check_aoi_integrity,
+    collect_git_context,
+    collect_ground_quantile_fallbacks,
+    load_aoi_registry,
+    lookup_aoi_registry_entry,
+)
 import hashlib
 
 # LAS streaming
@@ -409,6 +421,84 @@ def _online_quantile_update_indexed(
     frac_below = below_counts / np.maximum(counts, 1.0)
     q_u = q_u + float(lr) * (float(p) - frac_below)
     q_flat[uniq] = q_u
+
+
+def _build_ground_quantile_exact(
+    las_path: Path,
+    *,
+    mins: np.ndarray,
+    cell_res: float,
+    ny: int,
+    nx: int,
+    chunk_size: int,
+    counts_flat: np.ndarray,
+    percentile: float = 5.0,
+    max_memory_gb: float = 2.0,
+) -> Tuple[Optional[np.ndarray], Dict[str, object]]:
+    """Compute an exact per-cell ground percentile with a two-pass fill.
+
+    The returned array has shape ``(ny, nx)`` with NaN in empty cells. If the
+    memory estimate exceeds *max_memory_gb*, returns ``(None, meta)`` so caller
+    can apply a deterministic fallback.
+    """
+    n_cells = int(ny) * int(nx)
+    counts_flat = np.asarray(counts_flat, dtype=np.int64).reshape(-1)
+    if counts_flat.size != n_cells:
+        raise ValueError(
+            f"counts_flat shape mismatch: expected {n_cells} cells, got {counts_flat.size}"
+        )
+
+    total_points = int(np.sum(counts_flat))
+    mem_bytes = total_points * 4  # float32 payload only
+    mem_gb = float(mem_bytes / (1024**3))
+    meta: Dict[str, object] = {
+        "percentile": float(percentile),
+        "total_points": total_points,
+        "estimated_memory_gb": round(mem_gb, 3),
+        "max_memory_gb": float(max_memory_gb),
+    }
+    if total_points <= 0:
+        return np.full((ny, nx), np.nan, dtype=np.float32), meta
+    if mem_gb > float(max_memory_gb):
+        meta["fallback_reason"] = "memory_limit_exceeded"
+        return None, meta
+
+    offsets = np.zeros(n_cells + 1, dtype=np.int64)
+    np.cumsum(counts_flat, out=offsets[1:])
+    values = np.empty(total_points, dtype=np.float32)
+    cursors = offsets[:-1].copy()
+
+    # Pass 2: insert z values into each cell's contiguous slice.
+    for x, y, z in _stream_points(las_path, chunk_size):
+        ix, iy, mask = _bin_indices(x, y, mins, cell_res, ny, nx)
+        if not np.any(mask):
+            continue
+        flat = (iy * nx + ix).astype(np.int64, copy=False)
+        z_valid = z[mask].astype(np.float32, copy=False)
+
+        # Group by cell id to assign contiguous chunk slices.
+        order = np.argsort(flat, kind="stable")
+        flat_sorted = flat[order]
+        z_sorted = z_valid[order]
+        uniq, starts, run_counts = np.unique(
+            flat_sorted, return_index=True, return_counts=True
+        )
+        for cell, start, run_count in zip(uniq, starts, run_counts):
+            pos = int(cursors[int(cell)])
+            end = pos + int(run_count)
+            values[pos:end] = z_sorted[start : start + run_count]
+            cursors[int(cell)] = end
+
+    q = np.full(n_cells, np.nan, dtype=np.float32)
+    occupied = np.nonzero(counts_flat > 0)[0]
+    for cell in occupied:
+        start = int(offsets[int(cell)])
+        end = int(offsets[int(cell) + 1])
+        if end <= start:
+            continue
+        q[int(cell)] = np.percentile(values[start:end], float(percentile))
+
+    return q.reshape(ny, nx), meta
 
 
 def _autodetect_crs_from_las(las_path: Path) -> Optional[Dict[str, object]]:
@@ -832,16 +922,22 @@ def _build_ground_csf(
     return dem.astype(np.float32), csf_meta
 
 
-def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: bool,
-                     ground_method: str = "min",
-                     quantile_lr: float = 0.05,
-                     bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-                     count_grid: Optional[np.ndarray] = None,
-                     include_dsm: bool = False) -> Tuple[np.ndarray, Dict]:
+def build_ground_dem(
+    las_path: Path,
+    cell_res: float,
+    chunk_size: int,
+    verbose: bool,
+    ground_method: str = "min",
+    quantile_lr: float = 0.05,
+    bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    count_grid: Optional[np.ndarray] = None,
+    include_dsm: bool = False,
+    quantile_max_memory_gb: float = 2.0,
+) -> Tuple[np.ndarray, Dict]:
     """Build a ground-surface DEM by streaming LAS points into a regular grid.
 
-    Uses either per-cell minimum Z (``ground_method='min'``) or an online 5th
-    percentile estimate (``ground_method='p05'``).  No-data cells are filled via
+    Uses either per-cell minimum Z (``ground_method='min'``) or an exact 5th
+    percentile estimate with memory guard (``ground_method='p05'``).  No-data cells are filled via
     nearest-neighbor interpolation.  Returns the DEM array and a metadata dict
     containing grid origin, extent, cell resolution, and shape.
 
@@ -861,9 +957,10 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
     dem = np.full((ny, nx), np.inf, dtype=np.float32)
     if include_dsm:
         dsm = np.full((ny, nx), -np.inf, dtype=np.float32)
-    # For percentile ground: maintain online q05 per cell
-    if ground_method.lower() != "min":
-        q05 = np.full((ny, nx), np.nan, dtype=np.float32)
+    use_quantile_ground = ground_method.lower() != "min"
+    quantile_counts_flat: Optional[np.ndarray] = None
+    if use_quantile_ground:
+        quantile_counts_flat = np.zeros(ny * nx, dtype=np.int64)
     global_min_z: Optional[float] = None
 
     if verbose:
@@ -885,15 +982,8 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
                 np.maximum.at(dsm.ravel(), flat, z_f32)
             if count_grid is not None:
                 np.add.at(count_grid.ravel(), flat, 1)
-            if ground_method.lower() != "min":
-                q05_flat = q05.ravel()
-                _online_quantile_update_indexed(
-                    q05_flat,
-                    flat,
-                    z_f32,
-                    p=0.05,
-                    lr=quantile_lr,
-                )
+            if quantile_counts_flat is not None:
+                np.add.at(quantile_counts_flat, flat, 1)
 
     # Replace inf (no data) with fallback values
     if np.isinf(dem).all():
@@ -910,13 +1000,43 @@ def build_ground_dem(las_path: Path, cell_res: float, chunk_size: int, verbose: 
             fallback = 0.0 if global_min_z is None else global_min_z
             dem = np.full_like(dem, float(fallback))
 
+    meta = {"mins": mins.tolist(), "maxs": maxs.tolist(), "cell_res": cell_res, "shape": [int(ny), int(nx)]}
+    if use_quantile_ground:
+        # Retain for reproducibility traces while p05 transitioned away from online updates.
+        meta["ground_quantile_lr_legacy"] = float(quantile_lr)
+
     # Choose ground surface
-    if ground_method.lower() == "min":
+    ground_method_actual = "min"
+    if not use_quantile_ground:
         ground = dem
     else:
-        # Fallback to dem where q05 is NaN
-        ground = np.where(np.isnan(q05), dem, q05)
-    meta = {"mins": mins.tolist(), "maxs": maxs.tolist(), "cell_res": cell_res, "shape": [int(ny), int(nx)]}
+        assert quantile_counts_flat is not None
+        q05, q05_meta = _build_ground_quantile_exact(
+            las_path,
+            mins=mins,
+            cell_res=cell_res,
+            ny=ny,
+            nx=nx,
+            chunk_size=chunk_size,
+            counts_flat=quantile_counts_flat,
+            percentile=5.0,
+            max_memory_gb=float(quantile_max_memory_gb),
+        )
+        if q05 is None:
+            ground = dem
+            q05_meta["fallback_method"] = "min"
+            if verbose:
+                print(
+                    "    WARNING: p05 ground fallback to min (memory estimate exceeds "
+                    f"{float(quantile_max_memory_gb):.2f} GB)",
+                    flush=True,
+                )
+        else:
+            # Fallback to DEM where q05 is NaN.
+            ground = np.where(np.isnan(q05), dem, q05)
+            ground_method_actual = "p05-exact"
+        meta["ground_quantile"] = q05_meta
+    meta["ground_method_actual"] = ground_method_actual
 
     if include_dsm:
         # Fill DSM gaps with NN interpolation (same approach as DTM)
@@ -1690,6 +1810,7 @@ def process_file(las_path: Path,
                  extract_features: bool = False,
                  compute_confidence: bool = False,
                  density_stats: bool = False,
+                 ground_quantile_max_memory_gb: float = 2.0,
                  csf_cloth_resolution: float = 0.5,
                  csf_class_threshold: float = 0.3,
                  csf_max_points: int = 20_000_000,
@@ -1774,7 +1895,10 @@ def process_file(las_path: Path,
             ground_method=_actual_ground_method if _actual_ground_method != ground_method else ground_method,
             bounds=(mins, maxs),
             count_grid=_count_grid,
+            quantile_max_memory_gb=float(ground_quantile_max_memory_gb),
         )
+        if isinstance(meta, dict):
+            _actual_ground_method = str(meta.get("ground_method_actual", _actual_ground_method))
     # Build HAG surface for detection
     # IMPORTANT: Output flags (emit_hag_surfaces) must NOT affect detection results
     if top_method.lower() == "p95":
@@ -2038,6 +2162,8 @@ def process_file(las_path: Path,
     if _actual_ground_method != ground_method:
         info["ground_method_requested"] = ground_method
         info["ground_method_actual"] = _actual_ground_method
+    if isinstance(meta, dict) and "ground_quantile" in meta:
+        info["ground_quantile"] = meta["ground_quantile"]
     # Optional CSF metadata (separate sub-object, outside _stable_signature scope)
     if _csf_meta is not None:
         info["csf"] = _csf_meta
@@ -2186,8 +2312,18 @@ def _validate_params(args: argparse.Namespace) -> None:
         errors.append(f"dedupe_radius_m must be > 0, got {args.dedupe_radius_m}")
     if args.max_grid_mb <= 0:
         errors.append(f"max_grid_mb must be > 0, got {args.max_grid_mb}")
+    if args.ground_quantile_max_memory_gb <= 0:
+        errors.append(
+            "ground_quantile_max_memory_gb must be > 0, "
+            f"got {args.ground_quantile_max_memory_gb}"
+        )
     if args.h_maxima <= 0:
         errors.append(f"h_maxima must be > 0, got {args.h_maxima}")
+    aoi_area_tolerance_pct = float(getattr(args, "aoi_area_tolerance_pct", 5.0))
+    if aoi_area_tolerance_pct <= 0:
+        errors.append(
+            f"aoi_area_tolerance_pct must be > 0, got {aoi_area_tolerance_pct}"
+        )
 
     if errors:
         raise SystemExit("Parameter validation failed:\n  " + "\n  ".join(errors))
@@ -2247,6 +2383,7 @@ def _write_effective_config(
             "hag_max": params.get("hag_max"),
             # Ground/top modeling
             "ground_method": params.get("ground_method"),
+            "ground_quantile_max_memory_gb": params.get("ground_quantile_max_memory_gb"),
             "top_method": params.get("top_method"),
             "top_zscore_cap": params.get("top_zscore_cap"),
             "top_quantile_lr": params.get("top_quantile_lr"),
@@ -2319,6 +2456,28 @@ def _write_effective_config(
     return config_path
 
 
+def _normalize_crs_code_for_compare(crs_meta: Optional[Dict[str, object]]) -> Optional[str]:
+    """Normalize CRS metadata into a comparable code string."""
+    if not isinstance(crs_meta, dict):
+        return None
+    epsg = crs_meta.get("epsg")
+    if epsg is not None:
+        try:
+            return f"EPSG:{int(epsg)}"
+        except (TypeError, ValueError):
+            pass
+    wkt = crs_meta.get("wkt")
+    if isinstance(wkt, str) and wkt.strip():
+        return wkt.strip()
+    return None
+
+
+def _write_run_manifest(path: Path, manifest: Dict[str, Any]) -> None:
+    """Write run manifest JSON to disk."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="LiDAR penguin detection via DEM+HAG")
     parser.add_argument("--data-root", required=True, help="Folder with LAS/LAZ files")
@@ -2326,7 +2485,24 @@ def main() -> None:
     parser.add_argument("--cell-res", type=float, default=0.25, help="DEM/HAG cell size in meters")
     parser.add_argument("--hag-min", type=float, default=0.2, help="Min HAG (m)")
     parser.add_argument("--hag-max", type=float, default=0.6, help="Max HAG (m)")
-    parser.add_argument("--ground-method", default="p05", choices=["min","p05","csf"], help="Ground DEM estimator per cell: p05 (default, robust 5th percentile), min (cell minimum), or csf (requires cloth-simulation-filter)")
+    parser.add_argument(
+        "--ground-method",
+        default="p05",
+        choices=["min", "p05", "csf"],
+        help=(
+            "Ground DEM estimator per cell: p05 (default, exact percentile with memory guard), "
+            "min (cell minimum), or csf (requires cloth-simulation-filter)"
+        ),
+    )
+    parser.add_argument(
+        "--ground-quantile-max-memory-gb",
+        type=float,
+        default=2.0,
+        help=(
+            "When --ground-method p05 is used, maximum memory budget (GB) for exact "
+            "per-cell p05 computation. Falls back to min if exceeded."
+        ),
+    )
     parser.add_argument("--top-method", default="max", choices=["max","p95","p95-online","p95-exact"],
                         help="Top surface estimator per cell: max (default), p95 (histogram-based), p95-online (experimental online), p95-exact (two-pass exact percentile)")
     parser.add_argument("--top-zscore-cap", type=float, default=3.0, help="Z-score cap for top outliers")
@@ -2388,6 +2564,46 @@ def main() -> None:
         help="Skip tiles exceeding --max-grid-mb instead of failing the run (not recommended for final counts).",
     )
     parser.add_argument("--strict-outputs", action="store_true", help="Fail fast on GeoJSON/CSV output errors")
+    parser.add_argument(
+        "--official-reporting",
+        action="store_true",
+        help=(
+            "Enable official reporting mode: enforce deterministic defaults, require dedupe "
+            "for multi-tile runs, and fail on degraded conditions unless --allow-degraded."
+        ),
+    )
+    parser.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="Allow official mode to complete even when run_status=DEGRADED.",
+    )
+    parser.add_argument(
+        "--override-blocked-aoi",
+        action="store_true",
+        help="Override AOI registry BLOCKED status (recorded in manifest).",
+    )
+    parser.add_argument("--aoi-id", default=None, help="AOI identifier for registry/gating checks.")
+    parser.add_argument(
+        "--aoi-registry",
+        default="manifests/aoi_registry.json",
+        help="AOI registry JSON with status entries (default: manifests/aoi_registry.json).",
+    )
+    parser.add_argument(
+        "--aoi-geojson",
+        default=None,
+        help="Optional AOI GeoJSON to validate CRS/area integrity (no geometry edits are performed).",
+    )
+    parser.add_argument(
+        "--aoi-area-tolerance-pct",
+        type=float,
+        default=5.0,
+        help="Tolerance for AOI property area vs computed area mismatch (percent).",
+    )
+    parser.add_argument(
+        "--run-manifest-path",
+        default=None,
+        help="Optional run manifest output path (default: <out_dir>/lidar_run_manifest.json).",
+    )
     # File selection filters
     parser.add_argument("--exclude-dir", action="append", default=[], help="Exclude any files within directories with this name (repeatable)")
     parser.add_argument("--skip-copc", action="store_true", help="Skip *.copc.laz files (COPC) when both COPC and LAS exist")
@@ -2430,6 +2646,27 @@ def main() -> None:
     if args.ground_method == "csf" and not HAS_CSF:
         raise SystemExit("CSF not installed. Run: pip install cloth-simulation-filter")
     _validate_params(args)
+
+    requested_ground_method = str(args.ground_method)
+    requested_top_method = str(args.top_method)
+    official_method_overrides: list[str] = []
+    if args.official_reporting:
+        if args.ground_method != OFFICIAL_DETERMINISTIC.ground_method:
+            official_method_overrides.append(
+                f"ground_method {args.ground_method}->{OFFICIAL_DETERMINISTIC.ground_method}"
+            )
+            args.ground_method = OFFICIAL_DETERMINISTIC.ground_method
+        if args.top_method != OFFICIAL_DETERMINISTIC.top_method:
+            official_method_overrides.append(
+                f"top_method {args.top_method}->{OFFICIAL_DETERMINISTIC.top_method}"
+            )
+            args.top_method = OFFICIAL_DETERMINISTIC.top_method
+        if official_method_overrides:
+            print(
+                "WARNING: official reporting enforced deterministic methods: "
+                + ", ".join(official_method_overrides),
+                file=sys.stderr,
+            )
 
     # Profile validation: warn if CLI values differ from profile recommendations
     _active_profile = None
@@ -2493,6 +2730,7 @@ def main() -> None:
 
     # CRS resolution: explicit CLI arg > auto-detect from LAS headers > None
     crs_meta = _crs_meta_from_args(args.crs_epsg, args.crs_wkt)
+    crs_mismatch_detected = False
     autodetected_crs: Optional[Dict[str, object]] = None
     if crs_meta is None and files:
         autodetected_crs = _autodetect_crs_from_files(files)
@@ -2508,6 +2746,7 @@ def main() -> None:
             cli_epsg = crs_meta.get("epsg")
             auto_epsg = autodetected_crs.get("epsg")
             if cli_epsg is not None and auto_epsg is not None and int(cli_epsg) != int(auto_epsg):
+                crs_mismatch_detected = True
                 print(
                     f"WARNING: CLI CRS (EPSG:{cli_epsg}) differs from auto-detected CRS "
                     f"(EPSG:{auto_epsg}). Using CLI value.",
@@ -2534,6 +2773,149 @@ def main() -> None:
         "autodetect" if autodetected_crs is not None and _crs_meta_from_args(args.crs_epsg, args.crs_wkt) is None else "cli"
     )
 
+    manifest_path = (
+        Path(args.run_manifest_path).resolve()
+        if args.run_manifest_path
+        else (out_path.parent / "lidar_run_manifest.json")
+    )
+    degraded_reasons: list[str] = []
+    run_warnings: list[str] = []
+    blocked_reasons: list[str] = []
+
+    aoi_registry_path = Path(args.aoi_registry).resolve()
+    aoi_registry: Dict[str, Dict[str, Any]] = {}
+    aoi_registry_error: Optional[str] = None
+    try:
+        aoi_registry = load_aoi_registry(aoi_registry_path)
+    except Exception as exc:
+        aoi_registry_error = str(exc)
+        run_warnings.append(
+            f"Failed to load AOI registry {aoi_registry_path}: {aoi_registry_error}"
+        )
+
+    aoi_registry_entry: Optional[Dict[str, Any]] = None
+    if args.aoi_id:
+        aoi_registry_entry = lookup_aoi_registry_entry(aoi_registry, str(args.aoi_id))
+        if aoi_registry_entry is None:
+            msg = f"AOI id '{args.aoi_id}' not found in AOI registry {aoi_registry_path}"
+            run_warnings.append(msg)
+            if args.official_reporting:
+                degraded_reasons.append(msg)
+        else:
+            aoi_status = str(aoi_registry_entry.get("status", "UNKNOWN")).upper()
+            if aoi_status == "BLOCKED":
+                reason = str(aoi_registry_entry.get("reason") or "No reason recorded")
+                since = str(aoi_registry_entry.get("blocked_since") or "unknown date")
+                block_msg = (
+                    f"AOI '{args.aoi_id}' is BLOCKED since {since}: {reason}"
+                )
+                if args.override_blocked_aoi:
+                    run_warnings.append(f"AOI block override used: {block_msg}")
+                elif args.official_reporting:
+                    blocked_reasons.append(block_msg)
+                else:
+                    run_warnings.append(block_msg)
+    elif args.official_reporting:
+        blocked_reasons.append(
+            "Official reporting requires --aoi-id to trace AOI authority and block status."
+        )
+
+    expected_crs_for_aoi = _normalize_crs_code_for_compare(crs_meta)
+    aoi_integrity: Optional[Dict[str, Any]] = None
+    if args.aoi_geojson:
+        aoi_geojson_path = Path(args.aoi_geojson).resolve()
+        if not aoi_geojson_path.exists():
+            msg = f"AOI GeoJSON not found: {aoi_geojson_path}"
+            degraded_reasons.append(msg)
+        else:
+            try:
+                aoi_integrity = check_aoi_integrity(
+                    aoi_geojson=aoi_geojson_path,
+                    expected_crs=expected_crs_for_aoi,
+                    area_property_tolerance_pct=float(args.aoi_area_tolerance_pct),
+                )
+                for warn in aoi_integrity.get("warnings", []) or []:
+                    run_warnings.append(str(warn))
+                for issue in aoi_integrity.get("issues", []) or []:
+                    degraded_reasons.append(str(issue))
+            except Exception as exc:
+                degraded_reasons.append(f"AOI integrity validation failed: {exc}")
+
+    if crs_mismatch_detected:
+        degraded_reasons.append(
+            "CLI CRS differs from LAS auto-detected CRS; verify CRS authority before reporting."
+        )
+
+    dedupe_required_multi_tile = bool(args.official_reporting and len(files) > 1)
+    if dedupe_required_multi_tile and args.dedupe_radius_m is None:
+        blocked_reasons.append(
+            "Official reporting requires --dedupe-radius-m for multi-tile runs."
+        )
+
+    run_manifest: Dict[str, Any] = {
+        "schema_version": "1",
+        "purpose": "lidar_run_manifest",
+        "generated_at_utc": datetime.datetime.utcnow().isoformat() + "Z",
+        "official_reporting": bool(args.official_reporting),
+        "run_status": "PENDING",
+        "degraded_reasons": [],
+        "warnings": [],
+        "blocked_reasons": [],
+        "parameters": vars(args).copy(),
+        "git": collect_git_context(_ROOT),
+        "inputs": {
+            "data_root": str(data_root),
+            "tile_count": int(len(files)),
+            "tile_list": [str(p) for p in files],
+        },
+        "methods": {
+            "ground_method_requested": requested_ground_method,
+            "ground_method_effective": str(args.ground_method),
+            "top_method_requested": requested_top_method,
+            "top_method_effective": str(args.top_method),
+            "official_method_overrides": official_method_overrides,
+            "dedupe_radius_m": args.dedupe_radius_m,
+            "dedupe_required_multi_tile": dedupe_required_multi_tile,
+        },
+        "crs": {
+            "resolved": crs_meta,
+            "source": crs_source,
+            "autodetected": autodetected_crs,
+            "mismatch_detected": bool(crs_mismatch_detected),
+        },
+        "aoi": {
+            "aoi_id": args.aoi_id,
+            "registry_path": str(aoi_registry_path),
+            "registry_entry": aoi_registry_entry,
+            "registry_error": aoi_registry_error,
+            "aoi_geojson": str(Path(args.aoi_geojson).resolve()) if args.aoi_geojson else None,
+            "integrity": aoi_integrity,
+            "override_blocked_aoi": bool(args.override_blocked_aoi),
+        },
+        "overrides": {
+            "allow_degraded": bool(args.allow_degraded),
+            "override_blocked_aoi": bool(args.override_blocked_aoi),
+        },
+    }
+
+    if blocked_reasons:
+        run_manifest["run_status"] = "BLOCKED"
+        run_manifest["blocked_reasons"] = blocked_reasons
+        run_manifest["warnings"] = run_warnings
+        _write_run_manifest(manifest_path, run_manifest)
+        raise SystemExit("Official reporting blocked:\n  " + "\n  ".join(blocked_reasons))
+
+    if degraded_reasons and args.official_reporting and not args.allow_degraded:
+        run_manifest["run_status"] = "DEGRADED"
+        run_manifest["degraded_reasons"] = degraded_reasons
+        run_manifest["warnings"] = run_warnings
+        _write_run_manifest(manifest_path, run_manifest)
+        raise SystemExit(
+            "Official reporting refused degraded preflight. "
+            "Pass --allow-degraded to continue.\n  "
+            + "\n  ".join(degraded_reasons)
+        )
+
     summary = {
         "schema_version": "1",
         "purpose": LIDAR_CANDIDATES_PURPOSE,
@@ -2544,6 +2926,13 @@ def main() -> None:
         "coord_units": coord_units,
         "data_root": str(data_root),
         "params": vars(args).copy(),
+        "official_reporting": bool(args.official_reporting),
+        "official_profile": OFFICIAL_DETERMINISTIC.name if args.official_reporting else None,
+        "aoi_id": args.aoi_id,
+        "run_manifest": str(manifest_path),
+        "run_status": "OK",
+        "degraded_reasons": [],
+        "warnings": [],
         "files": [],
         "total_count": 0,
     }
@@ -2552,6 +2941,18 @@ def main() -> None:
             "name": _active_profile.name,
             "notes": _active_profile.notes,
         }
+    if run_warnings:
+        summary["warnings"] = list(run_warnings)
+    if degraded_reasons:
+        summary["run_status"] = "DEGRADED"
+        summary["degraded_reasons"] = list(degraded_reasons)
+    summary["aoi_registry"] = {
+        "path": str(aoi_registry_path),
+        "entry": aoi_registry_entry,
+        "error": aoi_registry_error,
+    }
+    if aoi_integrity is not None:
+        summary["aoi_integrity"] = aoi_integrity
 
     # Write effective config artifact for reproducibility
     effective_config_path = _write_effective_config(
@@ -2683,6 +3084,7 @@ def main() -> None:
                 extract_features=args.extract_features,
                 compute_confidence=args.compute_confidence,
                 density_stats=args.density_stats,
+                ground_quantile_max_memory_gb=args.ground_quantile_max_memory_gb,
                 csf_cloth_resolution=args.csf_cloth_resolution,
                 csf_class_threshold=args.csf_class_threshold,
                 csf_max_points=args.csf_max_points,
@@ -2706,6 +3108,14 @@ def main() -> None:
                 all_detections.append(d)
     if file_errors:
         summary["file_errors"] = file_errors
+
+    fallback_tiles = collect_ground_quantile_fallbacks(summary["files"])
+    if fallback_tiles:
+        fallback_msg = (
+            f"Ground p05 fallback to min occurred in {len(fallback_tiles)} tile(s)."
+        )
+        degraded_reasons.append(fallback_msg)
+        summary["ground_quantile_fallback_tiles"] = fallback_tiles
 
     # Aggregate blob features from all tiles and write to Parquet
     if args.emit_blob_features:
@@ -2738,8 +3148,13 @@ def main() -> None:
     # Cross-tile de-duplication (batch artifact + count)
     deduped: list[dict] | None = None
     dedupe_index: dict[str, dict] | None = None
-    if args.dedupe_radius_m and all_detections:
-        deduped, dedupe_index = _dedupe_detections(all_detections, radius_m=float(args.dedupe_radius_m))
+    if args.dedupe_radius_m is not None:
+        if all_detections:
+            deduped, dedupe_index = _dedupe_detections(
+                all_detections, radius_m=float(args.dedupe_radius_m)
+            )
+        else:
+            deduped, dedupe_index = [], {}
         summary["dedupe_radius_m"] = float(args.dedupe_radius_m)
         summary["total_count_deduped"] = int(len(deduped))
 
@@ -2846,8 +3261,30 @@ def main() -> None:
             if args.strict_outputs:
                 raise
 
-    with open(out_path, "w") as f:
-        json.dump(summary, f, indent=2)
+    reporting_counts: Dict[str, Any] = {
+        "raw_total_count": int(summary["total_count"]),
+        "deduped_total_count": int(len(deduped)) if deduped is not None else None,
+        "official_total_count": None,
+        "official_count_basis": None,
+        "raw_label": "RAW",
+        "deduped_label": "OFFICIAL" if args.official_reporting else "DEDUPED",
+    }
+    if args.official_reporting:
+        if deduped is not None:
+            reporting_counts["official_total_count"] = int(len(deduped))
+            reporting_counts["official_count_basis"] = "deduped"
+        else:
+            reporting_counts["official_total_count"] = int(summary["total_count"])
+            reporting_counts["official_count_basis"] = "raw_single_tile_no_dedupe"
+    summary["reporting_counts"] = reporting_counts
+
+    if degraded_reasons:
+        summary["run_status"] = "DEGRADED"
+        summary["degraded_reasons"] = list(dict.fromkeys(str(x) for x in degraded_reasons))
+    else:
+        summary["run_status"] = "OK"
+        summary["degraded_reasons"] = []
+    summary["warnings"] = list(dict.fromkeys(str(x) for x in summary.get("warnings", []) or []))
 
     # Optional aggregated detections CSV for client-friendly consumption
     if args.emit_csv:
@@ -2874,6 +3311,23 @@ def main() -> None:
             if args.strict_outputs:
                 raise
 
+    with open(out_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    run_manifest["run_status"] = str(summary.get("run_status") or "OK")
+    run_manifest["degraded_reasons"] = list(summary.get("degraded_reasons") or [])
+    run_manifest["warnings"] = list(summary.get("warnings") or [])
+    run_manifest["counts"] = reporting_counts
+    run_manifest["outputs"] = {
+        "summary_json": str(out_path),
+        "effective_config": str(effective_config_path),
+        "dedupe_outputs": summary.get("dedupe_outputs"),
+        "gpkg": summary.get("gpkg"),
+    }
+    run_manifest["methods"]["dedupe_applied"] = bool(deduped is not None)
+    run_manifest["methods"]["deduped_count"] = int(len(deduped)) if deduped is not None else None
+    _write_run_manifest(manifest_path, run_manifest)
+
     print(json.dumps({"files": len(summary["files"]), "total_count": summary["total_count"]}, indent=2))
     # Write provenance with timing and params
     total_time_s = float(sum((fi.get("time_s", 0.0) for fi in summary["files"])) )
@@ -2891,6 +3345,14 @@ def main() -> None:
         "total_seconds": round(total_time_s, 3),
         "avg_seconds_per_file": round(total_time_s / max(1, len(summary["files"])), 3)
     }, extra={"data_root": str(data_root), "n_files": len(summary["files"])})
+
+    if args.official_reporting and summary.get("run_status") == "DEGRADED" and not args.allow_degraded:
+        print(
+            "ERROR: Official reporting run ended DEGRADED. "
+            "Pass --allow-degraded to override.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "purpose": "aoi_registry",
+  "updated_at_utc": "2026-02-23T00:00:00Z",
+  "aois": {
+    "san_lorenzo_box_bushes": {
+      "aoi_id": "san_lorenzo_box_bushes",
+      "status": "BLOCKED",
+      "blocked_since": "2026-02-23",
+      "reason": "Bushes AOI geometry is unresolved/contradictory pending authoritative client coordinates.",
+      "authority": "Client-provided AOI coordinates required"
+    },
+    "sl_box_bushes": {
+      "aoi_id": "sl_box_bushes",
+      "status": "BLOCKED",
+      "blocked_since": "2026-02-23",
+      "reason": "Alias for San Lorenzo Bushes box; blocked until client AOI geometry is confirmed.",
+      "authority": "Client-provided AOI coordinates required"
+    }
+  }
+}

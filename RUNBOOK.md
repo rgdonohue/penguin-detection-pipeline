@@ -168,9 +168,51 @@ LiDAR outputs are explicitly **candidates**, not guaranteed individuals:
 
 For “official/defensible” runs where strict reproducibility matters, prefer deterministic estimators:
 - Recommended: `--ground-method p05 --top-method max`
-- Treat `--top-method p95` as **experimental** (streaming quantile sensitivity to chunking/order).
+- `--ground-method p05` now uses an exact percentile path with memory guard (`--ground-quantile-max-memory-gb`, default `2.0`). If exceeded, it falls back to `min` and records that in run metadata.
+- Treat `--top-method p95-online` as **experimental** (streaming quantile sensitivity to chunking/order).
 
 Reference policy constants: `pipelines/lidar_profiles.py` (`OFFICIAL_DETERMINISTIC`).
+
+### 1b1. Official Reporting Mode (Defensible + Gated)
+
+Use official mode for client-facing counts. It enforces deterministic methods (`p05` ground, `max` top), writes `lidar_run_manifest.json`, and applies AOI/degraded gating.
+
+```bash
+source .venv/bin/activate
+
+MPLCONFIGDIR=data/interim/mplconfig python scripts/run_lidar_hag.py \
+  --data-root "data/2025/Caleta Tiny Island" \
+  --out data/interim/official/caleta_tiny_official.json \
+  --cell-res 0.25 \
+  --hag-min 0.28 --hag-max 0.48 \
+  --min-area-cells 3 --max-area-cells 60 \
+  --crs-epsg 32720 \
+  --dedupe-radius-m 0.5 \
+  --aoi-id caleta_tiny_island \
+  --aoi-registry manifests/aoi_registry.json \
+  --aoi-geojson data/processed/aoi_caleta_tiny_island_epsg32720.geojson \
+  --official-reporting \
+  --strict-outputs
+```
+
+Official mode behavior:
+
+- Multi-tile runs require `--dedupe-radius-m`.
+- Outputs include:
+  - `reporting_counts.raw_total_count`
+  - `reporting_counts.deduped_total_count`
+  - `reporting_counts.official_total_count` (deduped when available)
+- `lidar_run_manifest.json` includes run status, degraded reasons, warnings, git context, CRS, tile list, AOI metadata, and method flags.
+
+If degraded conditions are detected (for example AOI integrity issues or CRS mismatch), official mode exits non-zero unless `--allow-degraded` is explicitly passed.
+
+### 1b1a. AOI Authority and Blocking
+
+AOI block rules are defined in `manifests/aoi_registry.json` and documented in `docs/process/BLOCKED_AOIS.md`.
+
+- `BLOCKED` AOIs (including San Lorenzo Bushes) are refused in official mode.
+- To bypass temporarily (not recommended), pass `--override-blocked-aoi`; this override is recorded in outputs and manifest.
+- Do not edit AOI geometries without authoritative client coordinates.
 
 ### 1b2. CRS Audit
 
@@ -234,7 +276,7 @@ python scripts/analyze_lidar_intensity.py \
 
 ### 1b7. San Lorenzo AOI Generation
 
-Regenerate San Lorenzo AOIs (includes Bushes box):
+Regenerate San Lorenzo AOIs (includes Caves box coordinates; Bushes box boundary still requires client-confirmed geometry):
 
 ```bash
 python scripts/create_san_lorenzo_aois.py \
@@ -251,6 +293,43 @@ python scripts/estimate_precision.py \
   --site-labels "Bushes Box" \
   --candidate-counts 45 \
   --out data/processed/precision_estimates.json
+```
+
+### 1b9. Labeled-Subset Validation + Parameter Sweep
+
+Score LiDAR detections against a labeled subset with one-to-one radius matching (TP/FP/FN, precision/recall/F1), optionally clipping to AOI and running a sweep.
+
+```bash
+source .venv/bin/activate
+
+# Score an existing LiDAR summary against georeferenced thermal labels.
+MPLCONFIGDIR=data/interim/mplconfig python scripts/validate_lidar_labeled_subset.py \
+  --lidar-summary data/interim/sl_box_bushes/sl_box_bushes.json \
+  --labels data/processed/thermal_labels_georef.geojson \
+  --aoi-geojson data/processed/aoi_san_lorenzo_boxes_epsg5345.geojson \
+  --aoi-crs-epsg 5345 \
+  --radii-m 1.0,1.5,2.0,2.5,3.0 \
+  --out data/interim/validation/lidar_labeled_subset_eval_box_aoi.json
+
+# Run a compact sweep and rank parameter sets by F1 at 2.0m radius.
+MPLCONFIGDIR=data/interim/mplconfig python scripts/validate_lidar_labeled_subset.py \
+  --labels data/processed/thermal_labels_georef.geojson \
+  --aoi-geojson data/processed/aoi_san_lorenzo_boxes_epsg5345.geojson \
+  --aoi-crs-epsg 5345 \
+  --radii-m 1.0,1.5,2.0,2.5,3.0 \
+  --out data/interim/validation/lidar_labeled_subset_sweep.json \
+  --sweep-data-root data/interim/sl_box_bushes_input \
+  --sweep-out-dir data/interim/validation/sweep_box \
+  --cell-res 0.25 \
+  --sweep-hag-mins 0.20,0.24 \
+  --sweep-hag-maxs 0.48,0.56 \
+  --sweep-min-areas 2,3 \
+  --sweep-max-areas 50 \
+  --sweep-ground-method p05 \
+  --sweep-top-method max \
+  --sweep-crs-epsg 32720 \
+  --primary-radius-m 2.0 \
+  --sweep-extra-arg=--skip-copc
 ```
 
 ### 1c. AOI-Clipped Evaluation (QC / Alignment)
