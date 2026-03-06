@@ -55,12 +55,15 @@ For detection results and validation status, see the [client status report](docs
 - [LIDAR_METHODOLOGY.md](docs/reports/LIDAR_METHODOLOGY.md) — Algorithm documentation
 - [FEATURE_ANALYSIS.md](docs/reports/FEATURE_ANALYSIS.md) — Spectral feature analysis and parameter sensitivity
 - [THERMAL_LIDAR_CROSSREF.md](docs/reports/THERMAL_LIDAR_CROSSREF.md) — Thermal georeferencing and cross-sensor analysis
+- [THERMAL_LIDAR_FUSION_INTERFACE_SPEC.md](docs/reports/THERMAL_LIDAR_FUSION_INTERFACE_SPEC.md) — Fusion-ready CRS/data contract and QA gates
 - [LIDAR_VALIDATION.md](docs/reports/LIDAR_VALIDATION.md) — AOI-clipped validation
 
 ### Process & Protocols
 
 - [LABELING_PROTOCOL.md](docs/process/LABELING_PROTOCOL.md) — Precision estimation labeling
 - [WORKSTREAMS_QC_VS_SCIENCE.md](docs/process/WORKSTREAMS_QC_VS_SCIENCE.md) — QC vs scientific milestones
+- [BLOCKED_AOIS.md](docs/process/BLOCKED_AOIS.md) — AOI authority gating for official reporting
+- [VALIDATION_PROTOCOL.md](docs/VALIDATION_PROTOCOL.md) — Subset QA + stratified audit protocol
 
 ### Development
 

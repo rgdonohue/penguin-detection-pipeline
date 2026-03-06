@@ -74,8 +74,9 @@ python3 scripts/run_lidar_hag.py \
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--ground-method` | min | Ground estimator: `min` or `p05` |
-| `--top-method` | p95 | Top surface: `max` or `p95` |
+| `--ground-method` | p05 | Ground estimator: `p05` (exact with memory guard), `min`, or `csf` |
+| `--ground-quantile-max-memory-gb` | 2.0 | Max memory budget for exact `p05`; falls back to `min` if exceeded |
+| `--top-method` | max | Top surface: `max`, `p95`, `p95-online`, or `p95-exact` |
 | `--connectivity` | 2 | Labeling connectivity (1=4-conn, 2=8-conn) |
 | `--dedupe-radius-m` | None | Cross-tile deduplication radius |
 | `--slope-max-deg` | None | Reject if ground slope > N degrees |
@@ -110,14 +111,14 @@ python3 scripts/run_lidar_hag.py \
 --cell-res 0.25 --hag-min 0.28 --hag-max 0.48 \
 --min-area-cells 3 --max-area-cells 60 --dedupe-radius-m 0.5
 ```
-**Accuracy:** ±6% on Caleta Tiny/Small Islands
+**Detection rates:** 0.98–1.06 on Caleta Tiny Island (varies by AOI definition), 0.81 on Caleta Small Island. See `docs/reports/DETECTION_RATE_SUMMARY.md` for current numbers.
 
 ### TrueView 515 (San Lorenzo Sites)
 ```bash
 --cell-res 0.3 --hag-min 0.28 --hag-max 0.48 \
 --min-area-cells 3 --max-area-cells 50 --dedupe-radius-m 0.5
 ```
-**Accuracy:** ~1% on San Lorenzo Box Count 11.9
+**Detection rates:** San Lorenzo site rates range 0.19–0.78 depending on terrain type. See `docs/reports/DETECTION_RATE_SUMMARY.md`.
 
 ## Output Format
 
@@ -205,8 +206,8 @@ python3 scripts/run_lidar_hag.py \
 ### HAG Calculation
 ```
 For each cell (i,j):
-  ground[i,j] = min(Z) for all points in cell
-  top[i,j] = max(Z) for all points in cell
+  ground[i,j] = p05(Z) or min(Z) depending on --ground-method
+  top[i,j] = max(Z) or p95(Z) depending on --top-method
   HAG[i,j] = top[i,j] - ground[i,j]
 ```
 
@@ -237,10 +238,12 @@ Uses union-find clustering:
 
 ## Validation Results (Argentina 2025)
 
-| Site | Sensor | Ground Truth | Detections | Error |
-|------|--------|--------------|------------|-------|
-| Caleta Tiny Island | DJI L2 | 321 | 340 | +6% |
-| Caleta Small Island | DJI L2 | 1,557 | 1,473 | -5% |
-| San Lorenzo Box 11.9 | TrueView 515 | 107 | 108 | +1% |
+**Current as of February 2026.** All counts use `--top-method max --skip-copc`. Previous counts using broken `p95` estimator have been retracted. See `docs/reports/DETECTION_RATE_SUMMARY.md` for the canonical table.
 
-**Combined Caleta accuracy:** -3.5% (1,813 detected vs 1,878 GT)
+| Site | Sensor | Ground Truth | Candidates (AOI) | Ratio | Notes |
+|------|--------|------------:|----------:|------:|-------|
+| Caleta Tiny Island | DJI L2 | 321 | 341 total / ~315 AOI | 0.98–1.06 | Ratio varies by AOI extent |
+| Caleta Small Island | DJI L2 | 1,557 | 1,255 | 0.81 | LiDAR-derived AOI |
+| San Lorenzo Road | TrueView 515 | 359 | 281 | 0.78 | Open terrain |
+| San Lorenzo Caves | TrueView 515 | 908 | 263 | 0.29 | Burrow-dominated; ~43% occlusion ceiling |
+| San Lorenzo Plains | TrueView 515 | 453 | 86 | 0.19 | Sparse density, approximate AOI |

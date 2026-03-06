@@ -26,10 +26,11 @@ class LidarParams:
     cell_res: float = 0.25
     hag_min: float = 0.2
     hag_max: float = 0.6
-    ground_method: str = "min"
-    top_method: str = "p95"
+    ground_method: str = "p05"
+    top_method: str = "max"
     top_zscore_cap: float = 3.0
     top_quantile_lr: float = 0.05
+    ground_quantile_max_memory_gb: float = 2.0
     connectivity: int = 2
     emit_geojson: bool = False
     crs_epsg: Optional[int] = None
@@ -100,6 +101,8 @@ def run(params: LidarParams) -> Path:
         str(params.top_zscore_cap),
         "--top-quantile-lr",
         str(params.top_quantile_lr),
+        "--ground-quantile-max-memory-gb",
+        str(params.ground_quantile_max_memory_gb),
         "--connectivity",
         str(params.connectivity),
         "--min-area-cells",

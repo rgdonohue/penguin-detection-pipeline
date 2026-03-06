@@ -125,7 +125,7 @@ Resolution sweep experiments confirmed that the current cell sizes are well-matc
 
 Finer resolutions (0.10–0.15 m) produce 1.5–3.3 pts/cell with >60% empty cells, causing noise fragmentation and 5-12x over-detection. The production resolutions provide sufficient density for reliable blob detection while maintaining reasonable grid sizes.
 
-Ground model choice (`min` vs `p05`) has a site-dependent effect: +9.4% detections with `p05` on the open Caleta island, -1.0% on burrow-heavy San Lorenzo terrain. The `min` method remains the default.
+Ground model choice (`min` vs `p05`) has a site-dependent effect: +9.4% detections with `p05` on the open Caleta island, -1.0% on burrow-heavy San Lorenzo terrain. The `p05` method is now the CLI and profile default.
 
 Full methodology details: `docs/reports/LIDAR_METHODOLOGY.md` §5.
 

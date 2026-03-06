@@ -34,6 +34,7 @@ def _default_args(**overrides) -> argparse.Namespace:
         slope_max_deg=None,
         dedupe_radius_m=None,
         max_grid_mb=512.0,
+        ground_quantile_max_memory_gb=2.0,
         h_maxima=0.05,
     )
     defaults.update(overrides)
@@ -156,6 +157,66 @@ def test_quantile_ground_is_order_invariant_for_duplicate_cell_hits(
     )
 
     assert np.allclose(dem_a, dem_b)
+
+
+def test_quantile_ground_is_chunk_invariant_and_matches_percentile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    mins = (0.0, 0.0, 0.0)
+    maxs = (0.25, 0.25, 0.0)
+    zs = np.arange(100, dtype=np.float64)
+    xs = np.full_like(zs, 0.1)
+    ys = np.full_like(zs, 0.1)
+
+    chunks_one = ((xs, ys, zs),)
+    chunks_many = tuple((xs[i : i + 10], ys[i : i + 10], zs[i : i + 10]) for i in range(0, len(zs), 10))
+
+    _patch_lidar_stream(monkeypatch, mins=mins, maxs=maxs, chunks=chunks_one)
+    dem_one, _meta_one = lidar.build_ground_dem(
+        tmp_path / "q_one.las",
+        cell_res=0.25,
+        chunk_size=10,
+        verbose=False,
+        ground_method="p05",
+    )
+
+    _patch_lidar_stream(monkeypatch, mins=mins, maxs=maxs, chunks=chunks_many)
+    dem_many, _meta_many = lidar.build_ground_dem(
+        tmp_path / "q_many.las",
+        cell_res=0.25,
+        chunk_size=10,
+        verbose=False,
+        ground_method="p05",
+    )
+
+    expected = float(np.percentile(zs, 5))
+    assert float(dem_one[0, 0]) == pytest.approx(expected)
+    assert float(dem_many[0, 0]) == pytest.approx(expected)
+    assert np.allclose(dem_one, dem_many)
+
+
+def test_quantile_ground_falls_back_to_min_when_memory_budget_too_small(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    _patch_lidar_stream(
+        monkeypatch,
+        mins=(0.0, 0.0, 0.0),
+        maxs=(0.25, 0.25, 0.0),
+        chunks=((([0.1, 0.1, 0.1], [0.1, 0.1, 0.1], [0.0, 10.0, 20.0])),),
+    )
+
+    dem, meta = lidar.build_ground_dem(
+        tmp_path / "q_fallback.las",
+        cell_res=0.25,
+        chunk_size=10,
+        verbose=False,
+        ground_method="p05",
+        quantile_max_memory_gb=1e-9,
+    )
+
+    assert float(dem[0, 0]) == pytest.approx(0.0)
+    assert meta.get("ground_method_actual") == "min"
+    assert meta.get("ground_quantile", {}).get("fallback_method") == "min"
 
 
 def test_watershed_split_uses_unique_labels_across_regions():

@@ -66,7 +66,7 @@ An optional Z-score cap (`--top-zscore-cap`) clips outlier HAG values beyond `me
 
 | Parameter | CLI Flag | Default | Description |
 |-----------|----------|---------|-------------|
-| Ground method | `--ground-method` | min | `min`, `p05` quantile estimator, or `csf` (Cloth Simulation Filter; requires `cloth-simulation-filter` package) |
+| Ground method | `--ground-method` | p05 | `p05` (exact 5th-percentile with memory guard; default), `min` (cell minimum), or `csf` (Cloth Simulation Filter; requires `cloth-simulation-filter` package) |
 | Top method | `--top-method` | max | `max` (recommended) or `p95` quantile estimator (has convergence issues) |
 | Z-score cap | `--top-zscore-cap` | 3.0 | Cap top surface outliers beyond mean + cap*std |
 | Quantile LR | `--top-quantile-lr` | 0.05 | Learning rate for online quantile tracking |
@@ -169,7 +169,7 @@ Detection counts under `min` vs `p05` ground methods (CSF not tested — optiona
 | DJI L2 / Caleta Tiny | 171 | 187 | +9.4% |
 | TrueView 515 / San Lorenzo | 512 | 507 | -1.0% |
 
-**Findings:** Ground method effect is site-dependent. On the open island (Caleta), `p05` smooths out sparse low-noise outliers and raises the DEM slightly, producing more detections. On burrow terrain (San Lorenzo), the effect reverses — `p05` raises the DEM enough to suppress some shallow detections. Neither method is universally better; `min` remains the safe default.
+**Findings:** Ground method effect is site-dependent. On the open island (Caleta), `p05` smooths out sparse low-noise outliers and raises the DEM slightly, producing more detections. On burrow terrain (San Lorenzo), the effect reverses — `p05` raises the DEM enough to suppress some shallow detections. Neither method is universally better; `p05` is the CLI and profile default (with memory guard fallback to `min`).
 
 DEM difference statistics (min minus p05): Caleta mean -0.002 m (std 0.028 m); San Lorenzo mean -0.015 m (std 0.089 m). San Lorenzo terrain is rougher, so the ground method choice matters more there.
 
