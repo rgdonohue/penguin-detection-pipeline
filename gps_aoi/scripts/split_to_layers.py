@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -152,14 +151,14 @@ AOI_INFO = {
         "penguin_count": 453,
         "notes": "The Plains total count area; perimeter winding of top/bottom edge waypoints",
     },
-    "san_lorenzo_box_bushes": {
-        "mission": "gps_box_bushes",
+    "san_lorenzo_box_caves": {
+        "mission": "gps_box_caves",
         "sensor": "GPS (field survey)",
         "sensor_type": "gps_aoi",
         "site": "san_lorenzo",
         "flight_group": "field_survey_san_lorenzo",
-        "penguin_count": 55,
-        "notes": "High Density Bushes box count; 4 corner coords. CAVEAT: coords fall in wrong LAS tile",
+        "penguin_count": 32,
+        "notes": "High Density Caves box count; 4 corner GPS coords from PDF p.4. Previously misattributed to Bushes.",
     },
     "san_lorenzo_road": {
         "mission": "gps_road_total_count",
@@ -169,15 +168,6 @@ AOI_INFO = {
         "flight_group": "field_survey_san_lorenzo",
         "penguin_count": 359,
         "notes": "Road total count; NO WAYPOINTS IN PDF - boundary data needed",
-    },
-    "san_lorenzo_box_caves": {
-        "mission": "gps_box_caves",
-        "sensor": "GPS (field survey)",
-        "sensor_type": "gps_aoi",
-        "site": "san_lorenzo",
-        "flight_group": "field_survey_san_lorenzo",
-        "penguin_count": 32,
-        "notes": "High Density Caves box count; NO CORNERS IN PDF - boundary data needed",
     },
     "caleta_tiny_island": {
         "mission": "gps_caleta_tiny",
@@ -545,7 +535,7 @@ def main() -> int:
 
     print("\nWriting index...")
     write_index(results, out_dir)
-    print(f"  INDEX.txt")
+    print("  INDEX.txt")
 
     print(f"\nDone. {len(results)} layers written to {out_dir}")
     return 0

@@ -1,7 +1,7 @@
 # Layer metadata
-# Generated: 2026-02-04
+# Generated: 2026-02-06
 
-name: gps_box_caves
+name: Box Count High Density Caves
 slug: aoi_san_lorenzo_box_caves
 layer_type: gps_aoi
 sensor_type: gps_aoi
@@ -10,8 +10,10 @@ site: san_lorenzo
 mission: gps_box_caves
 flight_group: field_survey_san_lorenzo
 source_file: san_lorenzo_box_caves_wgs84.geojson
+source_pdf: GPS Ground Truthing Notes 2025 - RD.pdf
 output_crs: EPSG:4326 (WGS84)
-geometry_type: EMPTY
+geometry_type: Polygon
 penguin_count: 32
-notes: High Density Caves box count; NO CORNERS IN PDF - boundary data needed
-status: empty
+notes: High Density Caves box count; 4 corner coords from PDF p.4. Polygon ~200 m2 but PDF measurement shows ~10,000 m2; coords may be interior stakes. Previously misattributed to Bushes.
+status: valid
+caveat: area_mismatch_200m2_vs_10000m2

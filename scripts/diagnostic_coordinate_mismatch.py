@@ -42,7 +42,8 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-# Box Count Coordinates from PDF (labeled as "Box Count High Density Bushes: 55 penguins")
+# Box Count Coordinates from PDF p.4 (listed under "Box Count High Density Caves: 32 penguins").
+# Previously misattributed to Bushes (55 penguins); Bushes has no listed coordinates.
 BOX_COUNT_COORDS_WGS84 = [
     (-42.085258, -63.867123),  # Corner 1 - Top-Left (NW)
     (-42.085381, -63.867161),  # Corner 2 - Bottom-Left (SW)

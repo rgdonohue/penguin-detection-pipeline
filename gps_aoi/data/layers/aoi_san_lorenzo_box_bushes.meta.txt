@@ -1,5 +1,5 @@
 # Layer metadata
-# Generated: 2026-02-04
+# Updated: 2026-02-06
 
 name: Box Count High Density Bushes
 slug: aoi_san_lorenzo_box_bushes
@@ -9,10 +9,10 @@ sensor: GPS (field survey)
 site: san_lorenzo
 mission: gps_box_bushes
 flight_group: field_survey_san_lorenzo
-source_file: san_lorenzo_box_bushes_wgs84.geojson
+source_file: NONE
 source_pdf: GPS Ground Truthing Notes 2025 - RD.pdf
 output_crs: EPSG:4326 (WGS84)
-geometry_type: Polygon
+geometry_type: NONE
 penguin_count: 55
-notes: High Density Bushes box count; 4 corner coords. CAVEAT: coords fall in wrong LAS tile
-status: valid
+notes: High Density Bushes box count (~3.8 ha from PDF measurement). NO GPS coordinates provided in PDF. The 4 coordinates previously attributed here actually belong to Caves (32 penguins) per PDF p.4 heading. Awaiting client coordinates.
+status: no_coordinates

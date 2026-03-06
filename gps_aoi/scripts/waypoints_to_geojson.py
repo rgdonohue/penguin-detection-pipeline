@@ -33,7 +33,7 @@ SITE_CONFIG: dict[str, dict[str, Any]] = {
     "san_lorenzo_plains": {"name": "The Plains", "penguin_count": 453, "area_ha": None, "crs_epsg": 5345, "is_point": False},
     "san_lorenzo_road": {"name": "Road Total Count", "penguin_count": 359, "area_ha": None, "crs_epsg": 5345, "is_point": False},
     "san_lorenzo_box_caves": {"name": "Box Count High Density Caves", "penguin_count": 32, "area_ha": None, "crs_epsg": 5345, "is_point": True},
-    "san_lorenzo_box_bushes": {"name": "Box Count High Density Bushes", "penguin_count": 55, "area_ha": None, "crs_epsg": 5345, "is_point": True},
+    "san_lorenzo_box_bushes": {"name": "Box Count High Density Bushes", "penguin_count": 55, "area_ha": 3.8, "crs_epsg": 5345, "is_point": True, "no_coordinates": True},
 }
 
 WGS84 = "EPSG:4326"
@@ -192,7 +192,7 @@ def build_plains_ring(typed_rows: list[tuple[float, float, str]], crs_epsg: int)
 
 
 def build_box_four_corners_ring(points: list[tuple[float, float]], crs_epsg: int) -> list[tuple[float, float]] | None:
-    """Form closed ring from four corner points (e.g. box bushes). Assumes CSV order is ring order."""
+    """Form closed ring from four corner points (e.g. box caves). Assumes CSV order is ring order."""
     if len(points) != 4:
         return None
     ring = list(points)
@@ -219,7 +219,7 @@ def process_site(
         if ring is None:
             ring = convex_hull_latlon(points, crs_epsg)
             ring = ring if ring and ring[0] == ring[-1] else (ring + [ring[0]] if ring else None)
-    elif site_id == "san_lorenzo_box_bushes" and len(points) == 4:
+    elif site_id == "san_lorenzo_box_caves" and len(points) == 4:
         ring = build_box_four_corners_ring(points, crs_epsg)
     elif len(points) < 3:
         return None
@@ -262,7 +262,7 @@ def main() -> int:
         cfg = SITE_CONFIG.get(site_id, {"name": site_id, "crs_epsg": 4326, "is_point": False})
         points = load_waypoints(path)
         typed_rows: list[tuple[float, float, str]] | None = None
-        if site_id in ("san_lorenzo_plains", "san_lorenzo_box_bushes", "san_lorenzo_caves"):
+        if site_id in ("san_lorenzo_plains", "san_lorenzo_box_caves", "san_lorenzo_caves"):
             typed_rows = load_waypoints_with_types(path)
         feat = process_site(site_id, points, cfg, typed_rows=typed_rows)
         out_path = out_dir / f"{site_id}_wgs84.geojson"

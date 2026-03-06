@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 from matplotlib.path import Path as MplPath
@@ -28,6 +28,7 @@ class AoiEvalParams:
     aoi_crs_epsg: Optional[int] = None
     emit_detection_ids: bool = False
     allow_geographic_crs: bool = False
+    area_property_tolerance_pct: float = 5.0
 
 
 def run(params: AoiEvalParams) -> Path:
@@ -50,6 +51,7 @@ def run(params: AoiEvalParams) -> Path:
             "AOI CRS appears geographic (degrees). Provide AOIs in the same projected CRS as LiDAR "
             "(meters), or pass allow_geographic_crs=True (area/density will be omitted)."
         )
+    warnings: List[str] = []
     for aoi in aois:
         mask = _points_in_geometry(pts_xy, aoi["geometry"])
         count = int(mask.sum())
@@ -68,6 +70,23 @@ def run(params: AoiEvalParams) -> Path:
             "area_m2": area_m2,
             "density_per_ha": density_per_ha,
         }
+        if area_m2 is not None:
+            prop_area_m2 = _properties_area_m2(aoi["properties"])
+            if prop_area_m2 is not None and area_m2 > 0:
+                delta_pct = abs(float(area_m2) - float(prop_area_m2)) / float(area_m2) * 100.0
+                status = "ok" if delta_pct <= float(params.area_property_tolerance_pct) else "mismatch"
+                row["area_consistency"] = {
+                    "status": status,
+                    "property_area_m2": float(prop_area_m2),
+                    "computed_area_m2": float(area_m2),
+                    "delta_pct": float(delta_pct),
+                    "tolerance_pct": float(params.area_property_tolerance_pct),
+                }
+                if status == "mismatch":
+                    warnings.append(
+                        f"AOI '{aoi['aoi_id']}' property area differs from computed area by "
+                        f"{delta_pct:.2f}%"
+                    )
         if params.emit_detection_ids:
             ids = [det_ids[i] for i in np.nonzero(mask)[0].tolist()]
             ids.sort()
@@ -88,6 +107,8 @@ def run(params: AoiEvalParams) -> Path:
         "aoi_count": int(len(results)),
         "results": results,
     }
+    if warnings:
+        out["warnings"] = warnings
 
     params.out_path.parent.mkdir(parents=True, exist_ok=True)
     params.out_path.write_text(json.dumps(out, indent=2))
@@ -257,6 +278,24 @@ def _extract_aois(geojson: Mapping[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def _properties_area_m2(properties: Mapping[str, Any]) -> Optional[float]:
+    if not isinstance(properties, Mapping):
+        return None
+    val_m2 = properties.get("area_m2")
+    if val_m2 is not None:
+        try:
+            return float(val_m2)
+        except (TypeError, ValueError):
+            return None
+    val_ha = properties.get("area_ha")
+    if val_ha is not None:
+        try:
+            return float(val_ha) * 10_000.0
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _points_in_geometry(points_xy: np.ndarray, geom: Mapping[str, Any]) -> np.ndarray:
     if points_xy.size == 0:
         return np.zeros((0,), dtype=bool)
@@ -321,5 +360,3 @@ def _ring_area(xy: np.ndarray) -> float:
     x = xy[:, 0]
     y = xy[:, 1]
     return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-
-

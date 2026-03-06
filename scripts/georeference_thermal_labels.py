@@ -40,12 +40,16 @@ for p in [str(_ROOT / "src"), str(_ROOT)]:
 from pyproj import Transformer
 
 # ── Known box corners (WGS84: lat, lon) ────────────────────────────
-BUSHES_BOX_CORNERS_WGS84 = {
+# These coordinates are from PDF p.4 under "Box Count High Density Caves: 32 Counted Penguins".
+# They were previously misattributed to the Bushes box count (55 penguins).
+# The thermal images orbit this location (tile 11.9 / Caves area).
+CAVES_BOX_CORNERS_WGS84 = {
     "NW": (-42.085258, -63.867123),
     "NE": (-42.085273, -63.866958),
     "SE": (-42.085392, -63.866972),
     "SW": (-42.085381, -63.867161),
 }
+BUSHES_BOX_CORNERS_WGS84 = CAVES_BOX_CORNERS_WGS84  # backwards compat
 CORNER_ORDER = ["NW", "NE", "SE", "SW"]
 
 # ── Corner matching (geometric heuristic for oblique views) ────────
@@ -329,7 +333,7 @@ def main():
 
     # Box corners → UTM
     corners_utm = {}
-    for name, (lat, lon) in BUSHES_BOX_CORNERS_WGS84.items():
+    for name, (lat, lon) in CAVES_BOX_CORNERS_WGS84.items():
         e, n = wgs84_to_utm.transform(lon, lat)
         corners_utm[name] = (e, n)
 

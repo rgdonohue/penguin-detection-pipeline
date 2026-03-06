@@ -27,28 +27,28 @@ except ImportError:
 class TestSanLorenzoAois:
     """Verify San Lorenzo AOI polygon construction."""
 
-    def test_bushes_box_polygon_area(self):
-        """Bushes box polygon area should be small (~200 m², 0.02 ha)."""
-        from scripts.create_san_lorenzo_aois import build_bushes_box_polygon, compute_polygon_area
-        feature = build_bushes_box_polygon()
+    def test_caves_box_polygon_area(self):
+        """Caves box polygon area should be small (~200 m², 0.02 ha)."""
+        from scripts.create_san_lorenzo_aois import build_caves_box_polygon, compute_polygon_area
+        feature = build_caves_box_polygon()
         assert feature is not None
         coords = feature["geometry"]["coordinates"][0]
         area_m2 = compute_polygon_area(coords)
         # GPS corners produce a very small polygon (~200 m²)
-        assert 50 < area_m2 < 500, f"Bushes box area {area_m2:.1f} m² outside expected range"
+        assert 50 < area_m2 < 500, f"Caves box area {area_m2:.1f} m² outside expected range"
 
-    def test_bushes_box_has_caveat(self):
-        """Bushes box should document the coordinate-tile mismatch caveat."""
-        from scripts.create_san_lorenzo_aois import build_bushes_box_polygon
-        feature = build_bushes_box_polygon()
+    def test_caves_box_has_caveat(self):
+        """Caves box should document the area mismatch caveat."""
+        from scripts.create_san_lorenzo_aois import build_caves_box_polygon
+        feature = build_caves_box_polygon()
         assert feature is not None
-        assert feature["properties"]["caveat"] == "coordinate_tile_mismatch"
+        assert feature["properties"]["caveat"] == "area_mismatch_200m2_vs_10000m2"
 
-    def test_bushes_box_penguin_count(self):
-        """Bushes box should have ground truth count of 55."""
-        from scripts.create_san_lorenzo_aois import build_bushes_box_polygon
-        feature = build_bushes_box_polygon()
-        assert feature["properties"]["penguin_count"] == 55
+    def test_caves_box_penguin_count(self):
+        """Caves box should have ground truth count of 32."""
+        from scripts.create_san_lorenzo_aois import build_caves_box_polygon
+        feature = build_caves_box_polygon()
+        assert feature["properties"]["penguin_count"] == 32
 
     def test_plains_perimeter_polygon(self):
         """Plains polygon should be built from perimeter winding, not convex hull."""
@@ -106,9 +106,9 @@ class TestSanLorenzoAois:
         data = json.loads(out_path.read_text())
         assert data["type"] == "FeatureCollection"
         assert data["crs"]["epsg"] == 5345
-        # Should have at least 4 features: caves, plains, bushes box, road
+        # Should have at least 4 features: caves, plains, caves box, road
         assert len(data["features"]) >= 4
         aoi_ids = [f["properties"]["aoi_id"] for f in data["features"]]
         assert "san_lorenzo_caves" in aoi_ids
         assert "san_lorenzo_plains" in aoi_ids
-        assert "san_lorenzo_box_bushes" in aoi_ids
+        assert "san_lorenzo_box_caves" in aoi_ids

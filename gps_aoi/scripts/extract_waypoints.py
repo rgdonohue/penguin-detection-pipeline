@@ -167,11 +167,12 @@ def extract_waypoints_from_pdf_text(text: str) -> dict[str, list[tuple[float, fl
     """Parse PDF-derived text and return waypoints per site.
 
     Returns dict: site_id -> list of (lat, lon, point_type, description).
-    Handles: COORDINATES (box bushes), High Density Caves, The Plains, The Road.
+    Handles: COORDINATES (box caves — listed under Caves heading in PDF),
+    High Density Caves, The Plains, The Road.
     Applies known typo fix: Plains last bottom_edge 63.860152 -> 63.870152.
     """
     result: dict[str, list[tuple[float, float, str, str]]] = {
-        "san_lorenzo_box_bushes": [],
+        "san_lorenzo_box_caves": [],
         "san_lorenzo_caves": [],
         "san_lorenzo_plains": [],
         "san_lorenzo_road": [],
@@ -182,7 +183,7 @@ def extract_waypoints_from_pdf_text(text: str) -> dict[str, list[tuple[float, fl
 
     while i < n:
         line = lines[i]
-        # COORDINATES: then 4 lines -> Box Bushes (4 corners)
+        # COORDINATES: then 4 lines -> Box Caves corners (PDF p.4, under Caves heading)
         if "COORDINATES:" in line.upper():
             i += 1
             for k in range(4):
@@ -191,7 +192,7 @@ def extract_waypoints_from_pdf_text(text: str) -> dict[str, list[tuple[float, fl
                 pair = parse_decimal_hemisphere(lines[i + k])
                 if pair is not None:
                     lat, lon = pair
-                    result["san_lorenzo_box_bushes"].append(
+                    result["san_lorenzo_box_caves"].append(
                         (lat, lon, "point", f"Corner {k + 1}")
                     )
             i += 4

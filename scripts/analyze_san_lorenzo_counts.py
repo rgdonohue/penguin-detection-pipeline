@@ -243,7 +243,7 @@ def analyze_san_lorenzo():
             name="Box Count High Density Bushes",
             penguin_count=55,
             area_m2=37983.65,  # From PDF: 408,852.64 ft² = 37,983.65 m²
-            notes="Rectangular area"
+            notes="No GPS coordinates in PDF; area from satellite measurement only"
         ),
     }
 

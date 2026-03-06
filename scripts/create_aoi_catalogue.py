@@ -150,7 +150,7 @@ def main() -> int:
     san_lorenzo_confidence = {
         "san_lorenzo_caves": ("reconstructed", "Waypoints + estimated left edge."),
         "san_lorenzo_plains": ("reconstructed", "Top/bottom edge waypoints; lateral bounds estimated."),
-        "san_lorenzo_box_bushes": ("confirmed", "4-corner GPS coordinates from PDF."),
+        "san_lorenzo_box_caves": ("confirmed", "4-corner GPS coordinates from PDF p.4 (Caves heading)."),
         "san_lorenzo_road": ("confirmed", "Convex hull of 34 GPS waypoints."),
     }
     features.extend(load_source_features(san_lorenzo_path, 5345, san_lorenzo_confidence))

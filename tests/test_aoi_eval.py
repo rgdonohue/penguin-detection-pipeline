@@ -200,4 +200,43 @@ def test_aoi_eval_epsg_urn_normalization(tmp_path: Path) -> None:
     assert payload["aoi_crs"] == "EPSG:32720"
 
 
+def test_aoi_eval_flags_property_area_mismatch(tmp_path: Path) -> None:
+    lidar = tmp_path / "lidar.json"
+    aoi = tmp_path / "aoi.geojson"
+    out = tmp_path / "out.json"
+
+    _write_json(
+        lidar,
+        {
+            "crs": {"epsg": 32720},
+            "detections": [{"id": "d0", "x": 0.5, "y": 0.5}],
+        },
+    )
+    # True area is 4 m2, but properties claim 1 ha (=10,000 m2): must be flagged.
+    _write_json(
+        aoi,
+        {
+            "type": "FeatureCollection",
+            "crs": {"epsg": 32720},
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"aoi_id": "bad_area", "area_ha": 1.0},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]],
+                    },
+                }
+            ],
+        },
+    )
+
+    run(AoiEvalParams(lidar_summary=lidar, aoi_geojson=aoi, out_path=out, area_property_tolerance_pct=5.0))
+    payload = json.loads(out.read_text())
+    row = payload["results"][0]
+    assert row["area_consistency"]["status"] == "mismatch"
+    assert row["area_consistency"]["property_area_m2"] == pytest.approx(10_000.0)
+    assert row["area_consistency"]["computed_area_m2"] == pytest.approx(4.0)
+    assert payload["warnings"]
+
 

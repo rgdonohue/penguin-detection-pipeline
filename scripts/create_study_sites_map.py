@@ -40,7 +40,7 @@ SAN_LORENZO_COLORS = {
     "san_lorenzo_coverage": "#e8e8e8",    # light gray for full coverage background
     "san_lorenzo_caves": "#d46a5a",       # muted red
     "san_lorenzo_plains": "#5a8a7e",      # muted teal
-    "san_lorenzo_box_bushes": "#c4a35a",  # muted gold
+    "san_lorenzo_box_caves": "#c4a35a",   # muted gold
     "san_lorenzo_road": "#8a5a9a",        # muted purple
 }
 CALETA_COLORS = {
@@ -186,7 +186,7 @@ def _plot_polygons_on_ax(
         if count is not None and aoi_id not in site_labels:
             name = props.get("name", aoi_id)
             short = name.replace("High Density Caves", "Caves").replace("The Plains", "Plains")
-            short = short.replace("Box Count High Density Bushes", "Box Bushes")
+            short = short.replace("Box Count High Density Caves", "Box Caves").replace("Box Count High Density Bushes", "Box Bushes")
             site_labels[aoi_id] = f"{short}: {count}"
 
     # Compute label positions; offset small polygons to avoid overlap
@@ -285,7 +285,7 @@ def main() -> None:
     # Use largest_only to get the main coverage outline, not tiny fragments
     sl_background = _polygons_from_geojson(sl_coverage_gj, largest_only=True)
 
-    # San Lorenzo: field-counted zones (Caves, Plains, Box Bushes)
+    # San Lorenzo: field-counted zones (Caves, Plains, Box Caves, Road)
     sl_path = root / "gps_aoi" / "data" / "output" / "all_aois_combined_wgs84.geojson"
     with open(sl_path) as f:
         sl_geojson = json.load(f)

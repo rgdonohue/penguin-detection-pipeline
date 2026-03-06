@@ -33,8 +33,8 @@
   - caleta_tiny_island: (no geometry) (empty)
 
 ### field_survey_san_lorenzo
-  - san_lorenzo_box_bushes: aoi_san_lorenzo_box_bushes.geojson
-  - san_lorenzo_box_caves: (no geometry) (empty)
+  - san_lorenzo_box_bushes: (no coordinates — awaiting client)
+  - san_lorenzo_box_caves: aoi_san_lorenzo_box_caves.geojson
   - san_lorenzo_caves: aoi_san_lorenzo_caves.geojson
   - san_lorenzo_plains: aoi_san_lorenzo_plains.geojson
   - san_lorenzo_road: (no geometry) (empty)
@@ -67,8 +67,8 @@
 - aoi_caleta_box2: (no geometry)
 - aoi_caleta_small_island: (no geometry)
 - aoi_caleta_tiny_island: (no geometry)
-- aoi_san_lorenzo_box_bushes: aoi_san_lorenzo_box_bushes.geojson
-- aoi_san_lorenzo_box_caves: (no geometry)
+- aoi_san_lorenzo_box_bushes: (no coordinates — awaiting client)
+- aoi_san_lorenzo_box_caves: aoi_san_lorenzo_box_caves.geojson
 - aoi_san_lorenzo_caves: aoi_san_lorenzo_caves.geojson
 - aoi_san_lorenzo_plains: aoi_san_lorenzo_plains.geojson
 - aoi_san_lorenzo_road: (no geometry)

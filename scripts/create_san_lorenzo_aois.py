@@ -216,16 +216,22 @@ def build_plains_polygon(waypoints: dict) -> dict:
     }
 
 
-def build_bushes_box_polygon() -> dict:
-    """Build the Bushes box count polygon from confirmed GPS corners.
+def build_caves_box_polygon() -> dict:
+    """Build the Caves box count polygon from GPS corners.
 
     GPS corners from the PDF (GPS Ground Truthing Notes 2025 - RD.pdf, p.4):
-    "Box Count High Density Bushes: 55 Counted Penguins"
+    "Box Count High Density Caves: 32 Counted Penguins"
+    (2 walked out between thermal and LiDAR passes → 30 effective)
 
-    NOTE: diagnostic_coordinate_mismatch.py confirmed these coordinates fall
-    inside the 11.9 (Caves) LiDAR tile, not the 11.10 (Bushes) tile. This
-    is either a mislabeling in the PDF or the coords are internal waypoints.
-    We include them as-is with a caveat; client clarification requested.
+    These coordinates are listed under the Caves heading in the PDF.
+    They fall within LiDAR tile 11.9 (Caves area), confirming the attribution.
+    However, the polygon they produce (~200 m²) is much smaller than the
+    Caves box shown in the PDF measurement (~10,000 m² / ~1 ha). The
+    coordinates may represent corner stakes or GPS marks within the box,
+    not the full boundary. Client clarification requested.
+
+    NOTE: These were previously misattributed to the Bushes box count
+    (55 penguins). The Bushes section of the PDF has NO listed coordinates.
     """
     # WGS84 corners: (lat, lon) — ordered as a closed ring
     corners_wgs84 = [
@@ -246,25 +252,30 @@ def build_bushes_box_polygon() -> dict:
     return {
         "type": "Feature",
         "properties": {
-            "aoi_id": "san_lorenzo_box_bushes",
+            "aoi_id": "san_lorenzo_box_caves",
             "site": "san_lorenzo",
-            "zone": "bushes_box_count",
-            "name": "Box Count High Density Bushes",
-            "penguin_count": 55,
+            "zone": "caves_box_count",
+            "name": "Box Count High Density Caves",
+            "penguin_count": 32,
             "area_ha": round(area_m2 / 10000, 4),
-            "density_per_ha": round(55 / max(area_m2 / 10000, 0.0001), 2),
+            "density_per_ha": round(32 / max(area_m2 / 10000, 0.0001), 2),
             "notes": (
-                "GPS corners from PDF p.4. Diagnostic shows these coords fall inside "
-                "the Caves tile (11.9), not Bushes (11.10). Client clarification requested."
+                "GPS corners from PDF p.4 (under Caves heading). Polygon is ~200 m² "
+                "but PDF measurement shows ~10,000 m²; coords may be interior stakes. "
+                "Previously misattributed to Bushes (55 penguins). Bushes has no coords."
             ),
             "source": "GPS Ground Truthing Notes 2025 - RD.pdf",
-            "caveat": "coordinate_tile_mismatch",
+            "caveat": "area_mismatch_200m2_vs_10000m2",
         },
         "geometry": {
             "type": "Polygon",
             "coordinates": [coords_proj]
         }
     }
+
+
+# Backwards-compatible alias for imports in tests and other scripts
+build_bushes_box_polygon = build_caves_box_polygon
 
 
 def build_road_polygon() -> dict:
@@ -395,12 +406,12 @@ def main() -> int:
             print(f"  Plains: {len(plains_feature['geometry']['coordinates'][0])} vertices, "
                   f"{plains_feature['properties']['area_ha']:.4f} ha")
 
-    # Build Bushes box count polygon (GPS corners from PDF)
-    bushes_feature = build_bushes_box_polygon()
-    if bushes_feature:
-        features.append(bushes_feature)
-        print(f"  Bushes box: {len(bushes_feature['geometry']['coordinates'][0])} vertices, "
-              f"{bushes_feature['properties']['area_ha']:.4f} ha")
+    # Build Caves box count polygon (GPS corners from PDF p.4, under Caves heading)
+    caves_box_feature = build_caves_box_polygon()
+    if caves_box_feature:
+        features.append(caves_box_feature)
+        print(f"  Caves box: {len(caves_box_feature['geometry']['coordinates'][0])} vertices, "
+              f"{caves_box_feature['properties']['area_ha']:.4f} ha")
 
     # Build Road polygon (from existing POSGAR GeoJSON)
     road_feature = build_road_polygon()

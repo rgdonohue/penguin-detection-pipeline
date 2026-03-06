@@ -7,35 +7,11 @@
         "aoi_id": "san_lorenzo_box_bushes",
         "name": "Box Count High Density Bushes",
         "source": "GPS Ground Truthing Notes 2025 - RD.pdf",
-        "penguin_count": 55
+        "penguin_count": 55,
+        "status": "no_coordinates",
+        "notes": "No GPS coordinates provided in PDF. Previous coordinates were misattributed from Caves box. Awaiting client input. Area ~3.8 ha from PDF measurement."
       },
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -63.866958,
-              -42.085273
-            ],
-            [
-              -63.867123,
-              -42.085258
-            ],
-            [
-              -63.867161,
-              -42.085381
-            ],
-            [
-              -63.866972,
-              -42.085392
-            ],
-            [
-              -63.866958,
-              -42.085273
-            ]
-          ]
-        ]
-      }
+      "geometry": null
     }
   ]
 }

@@ -1,7 +1,9 @@
 # Thermal–LiDAR Cross-Reference Analysis
 
 Date: 2026-02-02
-Site: San Lorenzo Bushes box count area (55 penguins, field count)
+Site: San Lorenzo **Caves** box count area (32 penguins, field count)
+
+> **Correction (2026-03):** This analysis was originally labeled "Bushes" but the 4 GPS corner coordinates in the field notes PDF (p.4) appear under the "Caves" heading (32 penguins), not the Bushes area (55 penguins, no GPS coordinates). The directory `data/interim/sl_box_bushes/` retains the original name. The thermal images and cross-reference results are from the Caves box area.
 
 ## Purpose
 
@@ -40,7 +42,7 @@ Answer two questions:
 
 ### Reference box
 
-The Bushes box count area is a ~14 m x 14 m reference box defined by 4 GPS corner stakes. Box corners in UTM 20S:
+The Caves box count area is a ~14 m x 14 m reference box defined by 4 GPS corner stakes. Box corners in UTM 20S:
 
 | Corner | Easting | Northing |
 |--------|---------|----------|
